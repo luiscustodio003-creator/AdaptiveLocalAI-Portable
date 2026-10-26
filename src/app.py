@@ -7,6 +7,8 @@ from model_watcher import ModelDirectoryWatcher
 from model_eligibility import build_recommendations, normalize_task
 from hf_discovery import discover_text_gguf_candidates
 from context_manager import adaptive_chat
+from hardware import detect_hardware
+from launch_planner import launch_plan
 
 ROOT = Path(__file__).resolve().parent.parent
 UI = ROOT / "src" / "ui"
@@ -14,8 +16,10 @@ MODELS = ROOT / "models"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("ADAPTIVE_UI_PORT", "8080"))
 LLAMA_PORT = int(os.environ.get("LLAMA_PORT", "8089"))
-CTX = 2048
-THREADS = max(1, min(4, (os.cpu_count() or 4) // 2))
+HARDWARE = detect_hardware()
+_DEFAULT_PLAN = launch_plan(HARDWARE, "unknown")
+CTX = _DEFAULT_PLAN["context"]
+THREADS = _DEFAULT_PLAN["threads"]
 SYSTEM_PROMPT = (
     "Responde sempre em português de Portugal, de forma clara e concisa. "
     "Quando forneceres código, usa blocos Markdown com a linguagem identificada e preserva a indentação. "
@@ -66,11 +70,21 @@ def discover_models():
     return found
 
 def find_runtime():
+    """Find a server executable for the current OS; verify compatibility at launch."""
     base = ROOT / "runtime"
-    if base.is_dir():
-        for exe in sorted(base.rglob("llama-server.exe")):
-            return exe
-    return None
+    if not base.is_dir():
+        return None
+    names = ("llama-server.exe", "llama-server") if os.name == "nt" else ("llama-server",)
+    candidates = []
+    for name in names:
+        candidates.extend(path for path in base.rglob(name) if path.is_file())
+    if not candidates:
+        return None
+    system, machine = platform.system().lower(), platform.machine().lower()
+    def score(path):
+        label = str(path.parent).lower()
+        return (0 if system in label else 1, 0 if machine in label else 1, str(path).lower())
+    return sorted(candidates, key=score)[0]
 
 
 def find_bench():
@@ -83,21 +97,15 @@ def find_bench():
 
 
 def ram_info():
-    try:
-        import ctypes
-
-        class MS(ctypes.Structure):
-            _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong),
-                        ("total", ctypes.c_ulonglong), ("avail", ctypes.c_ulonglong),
-                        ("tp", ctypes.c_ulonglong), ("ap", ctypes.c_ulonglong),
-                        ("tv", ctypes.c_ulonglong), ("av", ctypes.c_ulonglong),
-                        ("ae", ctypes.c_ulonglong)]
-        m = MS()
-        m.length = ctypes.sizeof(m)
-        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
-        return {"total_gb": round(m.total / 1024 ** 3, 1), "available_gb": round(m.avail / 1024 ** 3, 1)}
-    except Exception:
+    total = HARDWARE.get("memory_total_bytes")
+    available = HARDWARE.get("memory_available_bytes")
+    if total is None and available is None:
         return None
+    return {
+        "total_gb": round(total / 1024 ** 3, 1) if total is not None else None,
+        "available_gb": round(available / 1024 ** 3, 1) if available is not None else None,
+        "source": HARDWARE.get("memory_source", "unknown"),
+    }
 
 
 def system_status():
@@ -106,24 +114,27 @@ def system_status():
         disk = round(shutil.disk_usage(drive).free / 1024 ** 3)
     except Exception:
         disk = None
-    threads = os.cpu_count() or 0
+    threads = int(HARDWARE.get("logical_threads") or os.cpu_count() or 1)
     os_name = platform.system()
     if os_name == "Windows":
         os_name = "Windows " + ("11" if int(platform.version().split(".")[-1] or 0) >= 22000 else platform.release())
     rt = find_runtime()
     return {
         "os": os_name,
-        "cpu_cores": max(1, threads // 2), "cpu_threads": threads,
+        "cpu_cores": HARDWARE.get("physical_cores"), "cpu_threads": threads,
+        "cpu_features": HARDWARE.get("cpu_features", []),
+        "architecture": HARDWARE.get("machine"),
         "ram": ram_info(),
         "disk_free_gb": disk, "disk_label": (drive.drive or str(drive)),
-        "gpu": "Não detetada (CPU mode)",
+        "gpu": HARDWARE.get("gpu", {"detected": False, "usable": False, "source": "not_probed"}),
+        "hardware": HARDWARE,
         "python": platform.python_version(),
         "runtime_found": rt is not None,
         "runtime_path": str(rt.relative_to(ROOT)) if rt else None,
         "server": {"model": state["model"], "loading": state["loading"],
                    "ready": server_ready(), "error": state["error"], "port": LLAMA_PORT},
-        "config": {"threads": state.get("threads", THREADS), "context": CTX, "gpu_layers": 0,
-                   "kv_cache_gb": round(CTX * 0.00058, 1)},
+        "config": {"threads": state.get("threads", THREADS), "context": CTX,
+                   "gpu_layers": _DEFAULT_PLAN["gpu_layers"], "launch_plan": _DEFAULT_PLAN},
         "calibration": calibrator.status(),
     }
 
@@ -165,8 +176,9 @@ def load_model(name, threads_override=None):
     if not path.is_file():
         return False, "Modelo não encontrado."
     if not rt:
-        return False, "llama-server.exe não encontrado na pasta runtime."
-    effective_threads = THREADS
+        return False, "llama-server não encontrado num runtime compatível com este sistema operativo."
+    plan = launch_plan(HARDWARE, {"name": path.name, "size_bytes": path.stat().st_size})
+    effective_threads = int(plan["threads"])
     if threads_override is not None:
         try:
             requested_threads = int(threads_override)
@@ -196,8 +208,9 @@ def load_model(name, threads_override=None):
             state.update(loading=False, error=f"A porta {LLAMA_PORT} ja esta ocupada por outro processo.")
             return False, state["error"]
         cmd = [str(rt), "-m", str(path), "--host", HOST, "--port", str(LLAMA_PORT),
-               "-c", str(CTX), "-t", str(effective_threads), "-ngl", "0"]
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+               "-c", str(plan["context"]), "-t", str(effective_threads),
+               "-ngl", str(plan["gpu_layers"])]
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
         try:
             state["proc"] = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
                                              stderr=subprocess.DEVNULL, creationflags=flags)
@@ -398,7 +411,10 @@ def validate_calibrated_model(model_name, threads, cancel_event, must_abort):
     finally:
         restore_error = None
         try:
-            if previous_model and not already_correct:
+            if already_correct:
+                # Reused the exact ready model/configuration; leave its process untouched.
+                pass
+            elif previous_model:
                 ok, error = load_model(previous_model, threads_override=previous_threads)
                 if not ok:
                     raise CalibrationError(f"Validacao terminou mas nao foi possivel restaurar {previous_model}: {error}")
