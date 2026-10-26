@@ -1,12 +1,14 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-import json, os, platform, shutil, socket, subprocess, threading, time
+import json, os, platform, re, shutil, socket, subprocess, threading, time
 import urllib.error, urllib.parse, urllib.request
 from calibration import Calibrator, CalibrationError, Interrupted
 from model_watcher import ModelDirectoryWatcher
 from model_eligibility import build_recommendations, normalize_task
 from hf_discovery import discover_text_gguf_candidates
 from context_manager import adaptive_chat
+from hardware import detect_hardware
+from launch_planner import launch_plan
 
 ROOT = Path(__file__).resolve().parent.parent
 UI = ROOT / "src" / "ui"
@@ -14,8 +16,10 @@ MODELS = ROOT / "models"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("ADAPTIVE_UI_PORT", "8080"))
 LLAMA_PORT = int(os.environ.get("LLAMA_PORT", "8089"))
-CTX = 2048
-THREADS = max(1, min(4, (os.cpu_count() or 4) // 2))
+HARDWARE = detect_hardware()
+_DEFAULT_PLAN = launch_plan(HARDWARE, "unknown")
+CTX = _DEFAULT_PLAN["context"]
+THREADS = _DEFAULT_PLAN["threads"]
 SYSTEM_PROMPT = (
     "Responde sempre em português de Portugal, de forma clara e concisa. "
     "Quando forneceres código, usa blocos Markdown com a linguagem identificada e preserva a indentação. "
@@ -24,7 +28,7 @@ SYSTEM_PROMPT = (
     "Quando pedirem código completo, não omitas partes com reticências. "
 )
 
-state = {"proc": None, "model": None, "loading": False, "error": None, "threads": THREADS}
+state = {"proc": None, "model": None, "loading": False, "error": None, "threads": THREADS, "context": active_context(), "launch_plan": _DEFAULT_PLAN.copy()}
 lock = threading.Lock()
 # CALIBRATION_INTEGRATION_V1
 activity = {"active_chats": 0, "active_loads": 0}
@@ -66,11 +70,21 @@ def discover_models():
     return found
 
 def find_runtime():
+    """Find a server executable for the current OS; verify compatibility at launch."""
     base = ROOT / "runtime"
-    if base.is_dir():
-        for exe in sorted(base.rglob("llama-server.exe")):
-            return exe
-    return None
+    if not base.is_dir():
+        return None
+    names = ("llama-server.exe",) if os.name == "nt" else ("llama-server",)
+    candidates = []
+    for name in names:
+        candidates.extend(path for path in base.rglob(name) if path.is_file())
+    if not candidates:
+        return None
+    system, machine = platform.system().lower(), platform.machine().lower()
+    def score(path):
+        label = str(path.parent).lower()
+        return (0 if system in label else 1, 0 if machine in label else 1, str(path).lower())
+    return sorted(candidates, key=score)[0]
 
 
 def find_bench():
@@ -83,21 +97,72 @@ def find_bench():
 
 
 def ram_info():
-    try:
-        import ctypes
-
-        class MS(ctypes.Structure):
-            _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong),
-                        ("total", ctypes.c_ulonglong), ("avail", ctypes.c_ulonglong),
-                        ("tp", ctypes.c_ulonglong), ("ap", ctypes.c_ulonglong),
-                        ("tv", ctypes.c_ulonglong), ("av", ctypes.c_ulonglong),
-                        ("ae", ctypes.c_ulonglong)]
-        m = MS()
-        m.length = ctypes.sizeof(m)
-        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
-        return {"total_gb": round(m.total / 1024 ** 3, 1), "available_gb": round(m.avail / 1024 ** 3, 1)}
-    except Exception:
+    total = HARDWARE.get("memory_total_bytes")
+    available = HARDWARE.get("memory_available_bytes")
+    if total is None and available is None:
         return None
+    return {
+        "total_gb": round(total / 1024 ** 3, 1) if total is not None else None,
+        "available_gb": round(available / 1024 ** 3, 1) if available is not None else None,
+        "source": HARDWARE.get("memory_source", "unknown"),
+    }
+
+
+_DEVICE_PROBE_CACHE = {"checked_at": 0.0, "result": None}
+_DEVICE_PROBE_LOCK = threading.Lock()
+
+
+def probe_runtime_devices(*, refresh=False):
+    """Ask llama.cpp for devices without enabling GPU offload automatically."""
+    now = time.monotonic()
+    with _DEVICE_PROBE_LOCK:
+        cached = _DEVICE_PROBE_CACHE.get("result")
+        if cached is not None and not refresh and now - _DEVICE_PROBE_CACHE["checked_at"] < 60:
+            return dict(cached)
+        runtime = find_runtime()
+        if runtime is None:
+            result = {"supported": False, "checked": False, "devices": [],
+                      "source": "runtime_missing", "detail": "llama-server não encontrado"}
+        else:
+            try:
+                completed = subprocess.run(
+                    [str(runtime), "--list-devices"],
+                    capture_output=True, text=True, timeout=8, check=False,
+                    cwd=str(runtime.parent),
+                )
+                output = ((completed.stdout or "") + "\n" + (completed.stderr or "")).strip()
+                lines = [line.strip() for line in output.splitlines() if line.strip()]
+                has_device_list = any("available devices" in line.lower() or
+                                      "device" in line.lower() for line in lines)
+                devices = [line for line in lines if re.match(r"^(?:[-*]\s*)?(?:CUDA|Vulkan|Metal|ROCm|SYCL|CPU|GPU|[0-9]+:)", line, re.I)]
+                result = {
+                    "supported": completed.returncode == 0,
+                    "checked": True,
+                    "return_code": completed.returncode,
+                    "devices": devices,
+                    "source": "llama_server_list_devices",
+                    "detail": "\n".join(lines)[:12000],
+                    "device_listing_detected": has_device_list,
+                    "runtime_path": str(runtime.relative_to(ROOT)),
+                    "gpu_offload_enabled": False,
+                }
+            except subprocess.TimeoutExpired:
+                result = {"supported": False, "checked": True, "devices": [],
+                          "source": "llama_server_list_devices", "detail": "Timeout ao consultar dispositivos"}
+            except Exception as exc:
+                result = {"supported": False, "checked": True, "devices": [],
+                          "source": "llama_server_list_devices",
+                          "detail": f"{type(exc).__name__}: {exc}"}
+        _DEVICE_PROBE_CACHE.update(checked_at=time.monotonic(), result=result)
+        return dict(result)
+
+
+def active_context():
+    """Return the context size belonging to the currently active model plan."""
+    try:
+        return max(2048, min(16384, int(state.get("context", CTX))))
+    except (TypeError, ValueError):
+        return CTX
 
 
 def system_status():
@@ -106,24 +171,28 @@ def system_status():
         disk = round(shutil.disk_usage(drive).free / 1024 ** 3)
     except Exception:
         disk = None
-    threads = os.cpu_count() or 0
+    threads = int(HARDWARE.get("logical_threads") or os.cpu_count() or 1)
     os_name = platform.system()
     if os_name == "Windows":
         os_name = "Windows " + ("11" if int(platform.version().split(".")[-1] or 0) >= 22000 else platform.release())
     rt = find_runtime()
     return {
         "os": os_name,
-        "cpu_cores": max(1, threads // 2), "cpu_threads": threads,
+        "cpu_cores": HARDWARE.get("physical_cores"), "cpu_threads": threads,
+        "cpu_features": HARDWARE.get("cpu_features", []),
+        "architecture": HARDWARE.get("machine"),
         "ram": ram_info(),
         "disk_free_gb": disk, "disk_label": (drive.drive or str(drive)),
-        "gpu": "Não detetada (CPU mode)",
+        "gpu": HARDWARE.get("gpu", {"detected": False, "usable": False, "source": "not_probed"}),
+        "hardware": HARDWARE,
         "python": platform.python_version(),
         "runtime_found": rt is not None,
         "runtime_path": str(rt.relative_to(ROOT)) if rt else None,
         "server": {"model": state["model"], "loading": state["loading"],
                    "ready": server_ready(), "error": state["error"], "port": LLAMA_PORT},
-        "config": {"threads": state.get("threads", THREADS), "context": CTX, "gpu_layers": 0,
-                   "kv_cache_gb": round(CTX * 0.00058, 1)},
+        "config": {"threads": state.get("threads", THREADS), "context": active_context(),
+                   "gpu_layers": state.get("launch_plan", _DEFAULT_PLAN).get("gpu_layers", 0),
+                   "launch_plan": state.get("launch_plan", _DEFAULT_PLAN)},
         "calibration": calibrator.status(),
     }
 
@@ -165,8 +234,15 @@ def load_model(name, threads_override=None):
     if not path.is_file():
         return False, "Modelo não encontrado."
     if not rt:
-        return False, "llama-server.exe não encontrado na pasta runtime."
-    effective_threads = THREADS
+        return False, "llama-server não encontrado num runtime compatível com este sistema operativo."
+    profile = calibrator.profile(path.name) if threads_override is None else None
+    requested_context = profile.get("context") if isinstance(profile, dict) else None
+    plan = launch_plan(
+        HARDWARE,
+        {"name": path.name, "size_bytes": path.stat().st_size},
+        requested_context=requested_context,
+    )
+    effective_threads = int(plan["threads"])
     if threads_override is not None:
         try:
             requested_threads = int(threads_override)
@@ -176,7 +252,6 @@ def load_model(name, threads_override=None):
             return False, "Numero de threads interno fora dos limites do CPU."
         effective_threads = requested_threads
     else:
-        profile = calibrator.profile(path.name)
         if profile:
             try:
                 prof_threads = int(profile.get("threads", THREADS))
@@ -186,7 +261,8 @@ def load_model(name, threads_override=None):
                 pass
 
     with lock:
-        state.update(loading=True, error=None, threads=effective_threads)
+        state.update(loading=True, error=None, threads=effective_threads,
+                     context=int(plan["context"]), launch_plan={**plan, "threads": effective_threads})
         stop_server()
         # Do not mistake an unrelated/stale listener for the process just launched.
         try:
@@ -196,8 +272,9 @@ def load_model(name, threads_override=None):
             state.update(loading=False, error=f"A porta {LLAMA_PORT} ja esta ocupada por outro processo.")
             return False, state["error"]
         cmd = [str(rt), "-m", str(path), "--host", HOST, "--port", str(LLAMA_PORT),
-               "-c", str(CTX), "-t", str(effective_threads), "-ngl", "0"]
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+               "-c", str(plan["context"]), "-t", str(effective_threads),
+               "-ngl", str(plan["gpu_layers"])]
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
         try:
             state["proc"] = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
                                              stderr=subprocess.DEVNULL, creationflags=flags)
@@ -398,14 +475,17 @@ def validate_calibrated_model(model_name, threads, cancel_event, must_abort):
     finally:
         restore_error = None
         try:
-            if previous_model and not already_correct:
+            if already_correct:
+                # Reused the exact ready model/configuration; leave its process untouched.
+                pass
+            elif previous_model:
                 ok, error = load_model(previous_model, threads_override=previous_threads)
                 if not ok:
                     raise CalibrationError(f"Validacao terminou mas nao foi possivel restaurar {previous_model}: {error}")
             else:
                 with lock:
                     stop_server()
-                    state.update(loading=False, error=None, threads=THREADS)
+                    state.update(loading=False, error=None, threads=THREADS, context=CTX, launch_plan=_DEFAULT_PLAN.copy())
         except Exception as exc:
             restore_error = exc
         with activity_lock:
@@ -446,6 +526,13 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
+        if path == "/api/diagnostics":
+            return self.send_json({
+                "hardware": HARDWARE,
+                "runtime": probe_runtime_devices(),
+                "plan": _DEFAULT_PLAN,
+                "system": system_status(),
+            })
         if path == "/api/status":
             self.send_json(system_status())
         elif path == "/api/models":
@@ -630,7 +717,7 @@ class Handler(SimpleHTTPRequestHandler):
             response_started = True
             result = adaptive_chat(
                 body.get("messages", []), call_once=chat, call_stream=chat_stream,
-                emit=emit, context_tokens=CTX, system_prompt=SYSTEM_PROMPT,
+                emit=emit, context_tokens=active_context(), system_prompt=SYSTEM_PROMPT,
             )
             public_result = {key: value for key, value in result.items() if key != "content"}
             emit({"type": "done", **public_result})
@@ -671,6 +758,17 @@ class Handler(SimpleHTTPRequestHandler):
                 name = str(body.get("name") or "").strip()
                 result = model_watcher.notify_model_installed(name)
                 return self.send_json(result, 202 if result.get("accepted") else 409)
+            elif path == "/api/recalibrate-existing":
+                name = str(body.get("name") or "").strip()
+                result = model_watcher.recalibrate_existing(name)
+                return self.send_json(result, 202 if result.get("accepted") else 409)
+            elif path == "/api/diagnostics/refresh":
+                return self.send_json({
+                    "hardware": HARDWARE,
+                    "runtime": probe_runtime_devices(refresh=True),
+                    "plan": _DEFAULT_PLAN,
+                    "system": system_status(),
+                })
             elif path == "/api/load":
                 with activity_lock:
                     validation_active = maintenance.get("active", False)

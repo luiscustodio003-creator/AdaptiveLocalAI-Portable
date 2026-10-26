@@ -154,7 +154,7 @@ class ModelDirectoryWatcher:
             result["queued"] = sum(1 for record in self._inventory.values() if record.get("status") == "pending")
             return result
 
-    def notify_model_installed(self, model_name: str) -> dict[str, Any]:
+    def notify_model_installed(self, model_name: str, *, force: bool = False) -> dict[str, Any]:
         name = Path(str(model_name)).name
         if not name.lower().endswith(".gguf") or name.lower().startswith("mmproj"):
             return {"accepted": False, "reason": "invalid_model_name"}
@@ -164,21 +164,25 @@ class ModelDirectoryWatcher:
             return {"accepted": False, "reason": "model_missing_or_invalid_gguf"}
         with self._lock:
             existing = self._inventory.get(name, {})
-            if existing.get("signature") == signature and existing.get("status") in {"done", "baseline", "calibrating"}:
+            if existing.get("status") == "calibrating":
+                return {"accepted": False, "reason": "busy", "model": name}
+            if existing.get("signature") == signature and existing.get("status") in {"done", "baseline"} and not force:
                 try:
                     profile = self.calibrator.profile(name)
                 except Exception:
                     profile = None
                 if profile is not None and not profile.get("stale", False):
                     return {"accepted": False, "reason": "already_calibrated", "model": name}
-                if existing.get("status") == "calibrating":
-                    return {"accepted": False, "reason": "busy", "model": name}
             self._inventory[name] = {
                 "signature": signature, "status": "pending", "updated_at": _now(), "error": None,
             }
             self._save()
             self._status.update(state="queued", model=name, last_event="model_installed", error=None)
-        return {"accepted": True, "model": name, "state": "pending"}
+        return {"accepted": True, "model": name, "state": "pending", "forced": bool(force)}
+
+    def recalibrate_existing(self, model_name: str) -> dict[str, Any]:
+        """Explicitly queue a model from the initial baseline for a fresh calibration."""
+        return self.notify_model_installed(model_name, force=True)
 
     def scan_once(self) -> list[str]:
         """One scan interval, exposed for deterministic unit tests."""
@@ -246,14 +250,14 @@ class ModelDirectoryWatcher:
                     if record is not None:
                         record["status"] = "pending"
                         record["updated_at"] = _now()
-                        record["error"] = "Execu??o divergente; modelo devolvido ? fila."
+                        record["error"] = "Execução divergente; modelo devolvido à fila."
                     self._active_model = None
                     self._active_run_id = None
                     self._status.update(
                         state="waiting_calibrator" if worker_alive else "watching",
                         model=active,
                         last_event="calibration_run_mismatch",
-                        error="Identidade da execu??o divergente; modelo devolvido ? fila."
+                        error="Identidade da execução divergente; modelo devolvido à fila."
                     )
                     self._save()
                 return
@@ -262,7 +266,7 @@ class ModelDirectoryWatcher:
                     self._status.update(
                         state="error", model=active,
                         last_event="calibration_model_mismatch",
-                        error="O resultado da calibra??o pertence a outro modelo."
+                        error="O resultado da calibração pertence a outro modelo."
                     )
                 return
             if state not in {"done", "error", "cancelled"}:
@@ -294,7 +298,20 @@ class ModelDirectoryWatcher:
             return
 
         name = pending[0]
-        result = self.calibrator.start(name)
+        try:
+            result = self.calibrator.start(name)
+        except Exception as exc:
+            with self._lock:
+                record = self._inventory.get(name)
+                if record is not None:
+                    record["status"] = "error"
+                    record["error"] = f"{type(exc).__name__}: {exc}"
+                    record["updated_at"] = _now()
+                self._status.update(state="error", model=name,
+                                    last_event="calibration_start_failed",
+                                    error=record.get("error") if record else str(exc))
+                self._save()
+            return
         if result.get("accepted"):
             with self._lock:
                 self._active_model = name
