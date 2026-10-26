@@ -74,7 +74,7 @@ def find_runtime():
     base = ROOT / "runtime"
     if not base.is_dir():
         return None
-    names = ("llama-server.exe", "llama-server") if os.name == "nt" else ("llama-server",)
+    names = ("llama-server.exe",) if os.name == "nt" else ("llama-server",)
     candidates = []
     for name in names:
         candidates.extend(path for path in base.rglob(name) if path.is_file())
