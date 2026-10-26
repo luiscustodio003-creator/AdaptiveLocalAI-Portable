@@ -1,0 +1,158 @@
+{
+  "schema": 1,
+  "profiles": {
+    "gemma-3-1b-it-Q4_K_M.gguf": {
+      "schema": 1,
+      "model": "gemma-3-1b-it-Q4_K_M.gguf",
+      "created_at": "2026-10-23T20:22:30+00:00",
+      "threads": 3,
+      "generation_tok_s": 46.5704,
+      "tolerance": 0.03,
+      "candidates": [
+        2,
+        3,
+        4
+      ],
+      "measurements": [
+        {
+          "threads": 2,
+          "tok_s": 36.9846,
+          "samples": 2,
+          "min_tok_s": 16.9306,
+          "max_tok_s": 57.0385
+        },
+        {
+          "threads": 3,
+          "tok_s": 46.5704,
+          "samples": 2,
+          "min_tok_s": 16.2044,
+          "max_tok_s": 76.9363
+        },
+        {
+          "threads": 4,
+          "tok_s": 40.7192,
+          "samples": 2,
+          "min_tok_s": 14.9787,
+          "max_tok_s": 66.4596
+        }
+      ],
+      "fingerprint": {
+        "model": {
+          "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\models\\gemma-3-1b-it-Q4_K_M.gguf",
+          "size_bytes": 806058240,
+          "mtime_ns": 1792710761479996100
+        },
+        "runtime": {
+          "benchmark": {
+            "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\llama-bench.exe",
+            "size_bytes": 9216,
+            "mtime_ns": 1792692728000000000
+          },
+          "libraries": [
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-base.dll",
+              "size_bytes": 805376,
+              "mtime_ns": 1792692650000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-alderlake.dll",
+              "size_bytes": 1419264,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-cannonlake.dll",
+              "size_bytes": 1613824,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-cascadelake.dll",
+              "size_bytes": 1587200,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-cooperlake.dll",
+              "size_bytes": 1596416,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-haswell.dll",
+              "size_bytes": 1424384,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-icelake.dll",
+              "size_bytes": 1593344,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-ivybridge.dll",
+              "size_bytes": 1305600,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-piledriver.dll",
+              "size_bytes": 1298432,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-sandybridge.dll",
+              "size_bytes": 1294848,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-sapphirerapids.dll",
+              "size_bytes": 1873408,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-skylakex.dll",
+              "size_bytes": 1607168,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-sse42.dll",
+              "size_bytes": 920576,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-x64.dll",
+              "size_bytes": 913920,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-cpu-zen4.dll",
+              "size_bytes": 1603072,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml-rpc.dll",
+              "size_bytes": 231424,
+              "mtime_ns": 1792692664000000000
+            },
+            {
+              "path": "D:\\Dev\\Python\\AdaptiveLocalAI-Portable\\runtime\\llama-b11827\\ggml.dll",
+              "size_bytes": 78848,
+              "mtime_ns": 1792692666000000000
+            }
+          ]
+        },
+        "benchmark_config": {
+          "prompt_tokens": 32,
+          "generation_tokens": 32,
+          "repetitions": 2,
+          "gpu_layers": 0,
+          "batch_size": 128,
+          "ubatch_size": 128,
+          "selection_metric": "generation_tok_s"
+        },
+        "hardware": {
+          "system": "Windows",
+          "release": "11",
+          "machine": "AMD64",
+          "processor": "Intel64 Family 6 Model 142 Stepping 10, GenuineIntel",
+          "logical_threads": 8
+        }
+      }
+    }
+  }
+}

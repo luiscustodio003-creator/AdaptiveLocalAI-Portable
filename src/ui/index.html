@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Local AI Assistant</title>
+<style>
+:root{color-scheme:dark;--bg:#091022;--panel:#0e1a34;--panel2:#0b1530;--line:#1d2c4d;--text:#e8eefb;--muted:#8da2c8;--blue:#2b66f0;--blue2:#1f55d6;--green:#22c55e;--sel:#143063}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI",system-ui,sans-serif;overflow:hidden}
+svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.app{display:grid;grid-template-rows:90px minmax(0,1fr);height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:16px}
+.logo{width:50px;height:50px;border-radius:14px;display:grid;place-items:center;color:#4c8dff;background:#10244d;border:2px solid #2b66f0}
+.logo svg{width:32px;height:32px}
+.brand h1{margin:0;font-size:23px;font-weight:700;line-height:1.15}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:15px}
+.hr{display:flex;align-items:center;gap:18px}
+.pill{display:flex;align-items:center;gap:9px;padding:9px 16px;border-radius:999px;background:#0d2a2a;border:1px solid #14503f;color:var(--green);font-weight:500}
+.pill::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor}
+.pill.load{background:#2a2410;border-color:#5a4a14;color:#f5b942}
+.pill.off{background:#2b1218;border-color:#5a1f2b;color:#ff7b8a}
+.btn{display:flex;align-items:center;gap:9px;height:42px;padding:0 16px;border:1px solid #2a4278;border-radius:10px;background:#0c1a3a;color:var(--text);font:inherit;cursor:pointer}
+.btn.sq{width:42px;padding:0;justify-content:center;border-color:#26375e}
+.btn:hover{background:#12254f}
+.body{display:grid;grid-template-columns:380px minmax(0,1fr);min-height:0}
+aside{border-right:1px solid var(--line);padding:14px;overflow:auto;display:flex;flex-direction:column;gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.ct{display:flex;align-items:center;gap:12px;font-weight:600;font-size:16px;margin-bottom:12px}
+.ct small{font-weight:400;color:var(--muted);font-size:14px}
+.ct .badge{margin-left:auto;background:#12356e;color:#8fb8ff;border-radius:999px;padding:4px 12px;font-size:12.5px;font-weight:500}
+.row{display:flex;gap:0;padding:6px 6px;font-size:14px}
+.row span{width:132px;flex:none}.row b{font-weight:400}
+.row.r{justify-content:space-between}.row.r span{width:auto}
+.sel{position:relative}
+.sel select{width:100%;appearance:none;background:#0b1630;color:var(--text);border:1px solid #2a4278;border-radius:10px;padding:12px 40px 12px 14px;font:inherit;font-size:16px}
+.sel svg{position:absolute;right:12px;top:13px;pointer-events:none}
+.meta{color:var(--muted);font-size:13px;margin-top:10px}
+.ml{display:flex;flex-direction:column;gap:2px}
+.mi{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:9px;cursor:pointer;background:none;border:0;color:var(--text);text-align:left;font:inherit;width:100%}
+.mi:hover{background:#0f2147}.mi.on{background:var(--sel)}
+.dot{width:15px;height:15px;border-radius:50%;border:2px solid #3a4a6b;flex:none}
+.mi.on .dot{border-color:var(--green);background:radial-gradient(circle,var(--green) 40%,transparent 45%)}
+.mi .n{font-size:13.5px;overflow-wrap:anywhere}.mi .s{font-size:13px;color:var(--muted)}
+.btn.m{margin-top:14px;height:38px;background:#0c1a3a}
+main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:0 16px}
+.ch{display:flex;align-items:center;justify-content:space-between;padding:0 14px;height:58px;border-bottom:1px solid var(--line);margin-top:6px}
+.ch h2{display:flex;align-items:center;gap:12px;margin:0;font-size:18px;font-weight:600}
+.clear{background:none;border:0;color:var(--muted);display:flex;align-items:center;gap:8px;cursor:pointer;font:inherit}
+.clear:hover{color:var(--text)}
+.chat{flex:1;overflow:auto;padding:26px 14px;display:flex;flex-direction:column;gap:22px}
+.u{align-self:flex-end;max-width:80%;background:linear-gradient(90deg,#1f55d6,#2b66f0);border-radius:14px;padding:13px 16px;display:flex;align-items:flex-end;gap:18px;font-size:16px}
+.u .t{font-size:12px;color:#c3d5ff;display:flex;align-items:center;gap:4px;white-space:nowrap}
+.u .t svg{width:15px;height:15px}
+.b{display:flex;gap:16px;align-items:flex-start;max-width:88%}
+.av{width:42px;height:42px;border-radius:50%;background:#172a55;color:#cfe0ff;display:grid;place-items:center;flex:none;margin-top:-4px}
+.av svg{width:24px;height:24px}
+.bc{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;min-width:0;position:relative}
+.bc .tx{white-space:pre-wrap;overflow-wrap:anywhere;font-size:16px;line-height:1.55;padding-right:6px}
+.bc .tm{text-align:right;font-size:12px;color:var(--muted);margin-top:2px}
+.st{display:flex;align-items:center;gap:10px;color:var(--muted);margin-top:8px;font-size:14px;flex-wrap:wrap}
+.st i{width:1px;height:14px;background:#33456d}
+.st svg{width:18px;height:18px;color:var(--green)}
+.err .tx{color:#ff9aa6}
+.th{width:min(655px,100%)}
+.th .h{display:flex;align-items:center;gap:12px;font-size:16px;font-weight:500;color:var(--text)}
+.th .h svg{color:var(--muted)}
+.th .sub{margin:8px 0 12px 32px;padding-bottom:12px;border-bottom:1px solid var(--line);font-size:14px}
+.th .tr{display:flex;align-items:center;gap:14px;padding:6px 0;color:var(--muted);font-size:14px}
+.th .tr .k{width:210px;color:var(--text)}.th .tr .v{color:var(--text)}
+.th .tr svg{width:18px;height:18px}
+.dots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:#5b8cff;margin-left:4px;animation:bl 1.2s infinite}
+.dots span:nth-child(2){animation-delay:.2s}.dots span:nth-child(3){animation-delay:.4s}
+@keyframes bl{0%,80%,100%{opacity:.25}40%{opacity:1}}
+.comp{border:1px solid var(--line);background:var(--panel2);border-radius:14px;padding:12px;margin:8px 0 16px}
+.cin{display:flex;gap:14px;align-items:stretch}
+textarea{flex:1;min-height:72px;max-height:180px;resize:vertical;background:#0a1430;border:1px solid #2a4278;border-radius:10px;color:var(--text);font:inherit;font-size:16px;padding:14px 18px;outline:none}
+textarea:focus{border-color:var(--blue)}
+textarea::placeholder{color:#7f93ba}
+.send{width:52px;border:0;border-radius:10px;background:var(--blue);color:#fff;display:grid;place-items:center;cursor:pointer;align-self:flex-start;height:52px}
+.send:hover{background:var(--blue2)}.send:disabled{opacity:.5;cursor:not-allowed}
+.hint{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px;font-size:14px;color:var(--muted)}
+.hint div{display:flex;align-items:center;gap:12px}.hint .sep{width:1px;height:14px;background:#33456d}
+.hint .r{font-size:12.5px}
+dialog{background:var(--panel);color:var(--text);border:1px solid #2a4278;border-radius:14px;width:min(560px,92vw);padding:20px}
+dialog::backdrop{background:#000a}
+dialog pre{background:#0a1430;border:1px solid var(--line);border-radius:10px;padding:12px;max-height:50vh;overflow:auto;font-size:12.5px}
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-thumb{background:#22335a;border-radius:8px}
+@media(max-width:900px){body{overflow:auto}.app{height:auto}.body{grid-template-columns:1fr}aside{border-right:0}main{min-height:90vh}header{height:auto;padding:14px;flex-wrap:wrap;gap:12px}.b,.u{max-width:100%}.th .tr .k{width:150px}}
+
+/* Layout adaptativo e barra lateral ajustável */
+:root { --sidebar-width: 380px; }
+.app { height: 100vh; height: 100dvh; grid-template-rows: clamp(66px, 10vh, 90px) minmax(0,1fr); }
+header { min-width: 0; padding-inline: clamp(10px, 1.5vw, 24px); }
+.brand { min-width: 0; gap: clamp(8px, 1vw, 16px); }
+.brand h1 { font-size: clamp(17px, 1.5vw, 23px); }
+.brand p { font-size: clamp(11px, 1vw, 15px); }
+.body { grid-template-columns: var(--sidebar-width) 7px minmax(0,1fr); min-height: 0; min-width: 0; }
+#sidebar { min-width: 0; }
+#sidebar-resizer { cursor: col-resize; background: transparent; position: relative; z-index: 5; touch-action: none; }
+#sidebar-resizer::after { content: ""; position: absolute; inset: 0 2px; background: var(--line); }
+#sidebar-resizer:hover::after, #sidebar-resizer.dragging::after { background: var(--blue); }
+.card .ct { cursor: pointer; user-select: none; }
+.card .ct::after { content: "\2304"; margin-left: auto; color: var(--muted); font-size: 18px; }
+.card.collapsed .ct::after { content: "\203A"; }
+.card-content { min-width: 0; }
+#toggle-sidebar { flex: none; }
+/* O chat ocupa sempre todo o espaço disponível que sobra. */
+.body { grid-template-columns: var(--sidebar-width) 7px minmax(0, 1fr); }
+.body > main { min-width: 0; width: 100%; }
+body.sidebar-hidden .body { grid-template-columns: minmax(0, 1fr); }
+body.sidebar-hidden #sidebar,
+body.sidebar-hidden #sidebar-resizer { display: none; }
+@media (min-width: 901px) {
+  .card { padding: clamp(10px, 1vw, 14px); }
+  aside { gap: clamp(8px, 1.1vw, 16px); }
+  main { padding-inline: clamp(8px, 1.2vw, 16px); }
+  .chat { padding: clamp(12px, 2vw, 26px) clamp(8px, 1vw, 14px); }
+}
+@media (max-width: 900px) {
+  .app { height: auto; min-height: 100dvh; grid-template-rows: auto minmax(0,1fr); }
+  .body { display: flex; flex-direction: column; }
+  #sidebar { width: 100%; max-height: none; }
+  #sidebar-resizer { display: none; }
+  body.sidebar-hidden #sidebar { display: none; }
+  header { min-height: 66px; }
+}
+#manager-view { min-height: 100%; overflow-y: auto; padding-bottom: 24px; }
+#manager-view[hidden] { display: none !important; }
+.manager-intro, .manager-note { color: var(--muted, #9ba9c5); line-height: 1.6; }
+.manager-tools { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+.manager-tools input, .manager-tools select {
+  min-width: 150px; flex: 1; padding: 11px 12px; border-radius: 10px;
+  border: 1px solid var(--border, #273653); background: var(--panel, #101a2d);
+  color: inherit; font: inherit;
+}
+.manager-summary { color: var(--muted, #9ba9c5); margin: 12px 0; font-size: .9rem; }
+.manager-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 14px; }
+.manager-card { border: 1px solid var(--border, #273653); border-radius: 14px; padding: 16px; background: var(--panel, #101a2d); min-width: 0; }
+.manager-card h3 { margin: 0 0 10px; overflow-wrap: anywhere; font-size: 1rem; }
+.manager-card p { color: var(--muted, #9ba9c5); font-size: .88rem; line-height: 1.5; }
+.manager-badge { display: inline-block; border-radius: 999px; padding: 4px 9px; font-size: .75rem; background: #183b35; color: #8ce3c1; }
+.manager-card .btn { margin-top: 8px; }
+
+/* Etapa 1: navegação de trabalho e compositor reorganizado. */
+.nav-card .ct { margin-bottom: 8px; }
+.workspace-nav { display: flex; flex-direction: column; gap: 3px; }
+.nav-item { width: 100%; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 10px 11px; border: 1px solid transparent; border-radius: 9px; color: var(--text); background: transparent; text-align: left; font: inherit; cursor: pointer; }
+.nav-item:hover { background: #102044; border-color: #1d3157; }
+.nav-item.active { background: var(--sel); border-color: #244c8f; }
+.nav-item > span:nth-child(2) { min-width: 0; flex: 1; }
+.nav-symbol { width: 20px; color: #91b8ff; text-align: center; font-size: 18px; line-height: 1; }
+.nav-soon { flex: none; border: 1px solid #354668; color: var(--muted); border-radius: 6px; padding: 2px 5px; font-size: 10px; }
+.cin { align-items: flex-end; gap: 10px; }
+.cin textarea { min-width: 0; }
+.attach { flex: none; width: 42px; height: 52px; border: 1px solid #2a4278; border-radius: 10px; background: #0c1a3a; color: #8da2c8; font-size: 25px; line-height: 1; cursor: not-allowed; opacity: .75; }
+.composer-actions { width: min(245px, 29%); flex: none; display: grid; grid-template-columns: minmax(0,1fr) 52px; grid-template-rows: 15px 37px; gap: 0 8px; align-items: center; }
+.composer-model-label { grid-column: 1; grid-row: 1; color: var(--muted); font-size: 11px; }
+.composer-model { grid-column: 1; grid-row: 2; min-width: 0; }
+.composer-model select { min-width: 0; width: 100%; height: 37px; padding: 7px 28px 7px 9px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.composer-model svg { width: 15px; height: 15px; right: 7px; top: 11px; }
+.composer-actions .send { grid-column: 2; grid-row: 2; width: 52px; height: 52px; align-self: end; }
+@media (max-width: 1100px) and (min-width: 901px) {
+  .composer-actions { width: 205px; }
+  .attach { width: 38px; }
+  .cin { gap: 7px; }
+}
+@media (max-width: 650px) {
+  .cin { flex-wrap: wrap; align-items: stretch; }
+  .cin textarea { flex: 1 1 calc(100% - 50px); }
+  .attach { height: 48px; }
+  .composer-actions { width: 100%; grid-template-columns: minmax(0,1fr) 52px; grid-template-rows: 14px 40px; }
+  .composer-model select { height: 40px; }
+  .composer-actions .send { height: 48px; }
+}
+
+#hardware-view[hidden]{display:none!important}
+#hardware-view{width:100%;max-width:none;min-width:0;box-sizing:border-box;padding:0 0 28px;}
+#hardware-view .hardware-view-intro{margin:8px 0 18px;color:var(--muted)}
+#hardware-view #adaptiveHardwareDisclosure{display:block!important;width:100%;max-width:none;margin:0;border:0;background:transparent}
+#hardware-view #adaptiveHardwareDisclosure>summary{display:none!important}
+#hardware-view #adaptiveHardwareSelector{width:100%;max-width:none;margin:0;padding:20px;}
+#hardware-view .hardware-view-footer{display:flex;justify-content:flex-start;margin:20px 0 0;padding:16px 0 0;border-top:1px solid rgba(128,128,128,.25)}
+#hardware-view .hardware-view-footer .btn{min-height:42px}
+\n</style>
+
+<style>
+#adaptiveHardwareSelector{box-sizing:border-box;max-width:1150px;margin:18px auto;padding:18px;border:1px solid rgba(128,128,128,.35);border-radius:16px;background:rgba(128,128,128,.06);color:inherit;font:inherit}
+#adaptiveHardwareSelector *{box-sizing:border-box}
+#adaptiveHardwareSelector .ahs-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+#adaptiveHardwareSelector h2{font-size:1.2rem;margin:0 0 6px;font-weight:700}
+#adaptiveHardwareSelector p{margin:4px 0;line-height:1.45}
+#adaptiveHardwareSelector .ahs-muted{opacity:.75;font-size:.9rem}
+#adaptiveHardwareSelector .ahs-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+#adaptiveHardwareSelector select,#adaptiveHardwareSelector button{font:inherit;border:1px solid rgba(128,128,128,.45);border-radius:9px;padding:9px 12px;background:transparent;color:inherit}
+#adaptiveHardwareSelector button{cursor:pointer;font-weight:650;background:rgba(100,116,139,.16)}
+#adaptiveHardwareSelector button:disabled{opacity:.55;cursor:wait}
+#adaptiveHardwareSelector .ahs-hardware{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+#adaptiveHardwareSelector .ahs-chip{font-size:.82rem;border:1px solid rgba(128,128,128,.35);border-radius:99px;padding:4px 9px;opacity:.9}
+#adaptiveHardwareSelector .ahs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:12px}
+#adaptiveHardwareSelector .ahs-card{border:1px solid rgba(128,128,128,.35);border-radius:12px;padding:13px;min-width:0;background:rgba(128,128,128,.045)}
+#adaptiveHardwareSelector .ahs-card h3{font-size:1rem;margin:0 0 8px;overflow-wrap:anywhere}
+#adaptiveHardwareSelector .ahs-state{font-size:.76rem;font-weight:750;letter-spacing:.03em;text-transform:uppercase;opacity:.82}
+#adaptiveHardwareSelector .ahs-reasons{padding-left:18px;margin:8px 0;font-size:.88rem}
+#adaptiveHardwareSelector .ahs-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+#adaptiveHardwareSelector a{color:inherit;text-decoration:underline;text-underline-offset:3px}
+#adaptiveHardwareSelector .ahs-actions a,#adaptiveHardwareSelector .ahs-actions button{font-size:.86rem}
+#adaptiveHardwareSelector .ahs-error{color:#b45309}
+#adaptiveHardwareSelector .ahs-success{color:#15803d}
+#adaptiveHardwareSelector .ahs-hidden{display:none!important}
+@media(max-width:600px){#adaptiveHardwareSelector{margin:8px;padding:12px}}
+</style>
+<style id="adaptiveHardwareLayoutFix">
+/* Keep recommendations secondary and collapsed; preserve the chat as the main view. */
+#adaptiveHardwareDisclosure { flex: 0 0 auto; min-width: 0; max-width: 100%; margin: 8px 0 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); color: var(--text); }
+#adaptiveHardwareDisclosure > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; font-weight: 600; user-select: none; }
+#adaptiveHardwareDisclosure > summary::-webkit-details-marker { display: none; }
+#adaptiveHardwareDisclosure > summary::after { content: "+"; margin-left: auto; color: var(--muted); }
+#adaptiveHardwareDisclosure[open] > summary::after { content: "-"; }
+#adaptiveHardwareDisclosure[open] { max-height: 38vh; overflow: auto; }
+#adaptiveHardwareSelector { width: 100%; max-width: none; margin: 10px 0 0; padding: 10px; }
+#adaptiveHardwareSelector .ahs-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); }
+#adaptiveHardwareSelector .ahs-card { overflow-wrap: anywhere; }
+#adaptiveHardwareSelector .ahs-controls select { max-width: 100%; min-width: 0; }
+@media (max-width: 900px) { #adaptiveHardwareDisclosure[open] { max-height: 45vh; } }
+</style>
+<style id="adaptive-code-renderer-styles">
+/* Apresentação de código em respostas do assistente */
+.bc .tx.has-code { white-space: normal; overflow-wrap: normal; padding-right: 0; }
+.bc .tx .assistant-prose { display: block; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 12px; font-size: 15px; line-height: 1.55; }
+.code-card { min-width: 0; max-width: 100%; margin: 10px 0 14px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #070d1b; }
+.code-toolbar { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; background: #111e39; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.code-language { font-family: "Segoe UI", system-ui, sans-serif; font-size: 12px; font-weight: 600; text-transform: lowercase; }
+.copy-code-btn { flex: none; border: 1px solid #344a78; border-radius: 7px; padding: 6px 10px; background: #14264a; color: var(--text); font: inherit; cursor: pointer; }
+.copy-code-btn:hover { background: #1d3767; }
+.copy-code-btn.copied { border-color: #23784d; color: #8ce3b0; }
+.code-card pre { margin: 0; max-width: 100%; overflow: auto; padding: 14px; white-space: pre; tab-size: 4; -moz-tab-size: 4; line-height: 1.5; font: 13px/1.5 Consolas, "Cascadia Code", "Courier New", monospace; color: #dbeafe; }
+.code-card code { white-space: pre; overflow-wrap: normal; font: inherit; }
+@media(max-width:600px){ .code-card pre { padding: 10px; font-size: 12px; } .code-toolbar { padding: 7px 8px; } }
+</style>
+</head>
+<body>
+
+
+<div class="app">
+<header>
+  <div class="brand"><button class="btn sq" id="toggle-sidebar" title="Mostrar/ocultar barra lateral" aria-label="Mostrar/ocultar barra lateral">&#9776;</button><div class="logo" data-i="bot"></div><div><h1>Local AI Assistant</h1><p id="sub">A iniciar…</p></div></div>
+  <div class="hr">
+    <div class="pill load" id="pill">A ligar…</div>
+    <button class="btn sq" id="cfg" title="Configuração" data-i="gear"></button>
+    <button class="btn" id="diag"><span data-i="diag"></span>Diagnóstico</button>
+  </div>
+</header>
+<div class="body">
+<aside id="sidebar">
+  <section class="card nav-card" aria-label="Navegação principal">
+    <div class="ct"><span data-i="stack"></span>Espaço de trabalho</div>
+    <nav class="workspace-nav" aria-label="Secções da aplicação">
+      <button class="nav-item active" id="nav-new-chat" type="button"><span class="nav-symbol">＋</span><span>Nova conversa</span></button>
+      <button class="nav-item" id="nav-history" type="button"><span class="nav-symbol">◷</span><span>Conversas recentes</span></button>
+      <button class="nav-item" id="nav-projects" type="button"><span class="nav-symbol">▰</span><span>Projetos</span></button>
+      <button class="nav-item" id="nav-agents" type="button"><span class="nav-symbol">◇</span><span>Agentes</span><span class="nav-soon">Futuro</span></button>
+      <button class="nav-item" id="nav-performance" type="button"><span class="nav-symbol">⌁</span><span>Desempenho e calibração</span></button>
+      <button class="nav-item" id="nav-hardware" type="button"><span class="nav-symbol">▦</span><span>Hardware e sistema</span></button>
+      <button class="nav-item" id="nav-diagnostics" type="button"><span class="nav-symbol">⊕</span><span>Diagnósticos</span></button>
+    </nav>
+  </section>
+  <section class="card"><div class="ct"><span data-i="monitor"></span>Sistema</div>
+    <div class="row"><span>SO</span><b id="os">—</b></div>
+    <div class="row"><span>CPU</span><b id="cpu">—</b></div>
+    <div class="row"><span>RAM total</span><b id="ramt">—</b></div>
+    <div class="row"><span>RAM disponível</span><b id="ramf">—</b></div>
+    <div class="row"><span id="dl">Disco</span><b id="disk">—</b></div>
+    <div class="row"><span>GPU</span><b id="gpu">—</b></div>
+  </section>
+  <section class="card"><div class="ct"><span data-i="box"></span>Modelo ativo<span class="badge">Local</span></div>
+    <div class="meta" id="mm">—</div>
+    <div class="meta">A seleção e a troca do modelo estão junto ao campo de mensagem.</div>
+  </section>
+  <section class="card"><div class="ct"><span data-i="gear"></span>Configuração <small>(automática)</small></div>
+    <div class="row r"><span>Threads (CPU)</span><b id="c1">—</b></div>
+    <div class="row r"><span>Contexto</span><b id="c2">—</b></div>
+    <div class="row r"><span>GPU Layers</span><b id="c3">—</b></div>
+    <div class="row r"><span>KV Cache (estimado)</span><b id="c4">—</b></div>
+  </section>
+  <section class="card"><div class="ct"><span data-i="stack"></span>Modelos disponíveis <small>(pasta /models)</small></div>
+    <div class="ml" id="ml"></div>
+    <button class="btn m" id="mg"><span data-i="folder"></span>Gerir modelos</button>
+  </section>
+</aside>
+<div id="sidebar-resizer" role="separator" aria-orientation="vertical" title="Arrastar para ajustar a largura"></div>
+<main>
+<section id="hardware-view" hidden>
+  <div class="ch"><h2>Hardware e sistema</h2>
+    <button class="btn" id="hardware-back" type="button">Voltar à conversa</button>
+  </div>
+  <p class="manager-intro hardware-view-intro">Informação do sistema e escolha de modelos compatíveis com o hardware detetado neste computador.</p>
+  <div class="hardware-view-footer">
+    <button class="btn" id="hardware-back-bottom" type="button">Voltar ao chat</button>
+  </div>
+</section>
+
+  
+<details id="adaptiveHardwareDisclosure">
+  <summary>Modelos por hardware <span style="font-weight:400;color:var(--muted)">(seletor opcional)</span></summary>
+  <section id="adaptiveHardwareSelector" aria-labelledby="ahsTitle">
+  <div class="ahs-head">
+    <div>
+      <h2 id="ahsTitle">Escolha de modelo por hardware</h2>
+      <p class="ahs-muted">Filtra por tarefa, memória e runtime compatível. Não ordena por popularidade nem recomenda modelos só porque existem no Hub.</p>
+    </div>
+    <span id="ahsBadge" class="ahs-chip">A analisar este PC…</span>
+  </div>
+  <div class="ahs-controls">
+    <label for="ahsTask">Tarefa:</label>
+    <select id="ahsTask">
+      <option value="text">Chat / geração de texto</option>
+      <option value="vision">Compreensão de imagens</option>
+      <option value="tts">Texto para fala (TTS)</option>
+      <option value="asr">Reconhecimento de fala (ASR)</option>
+      <option value="image_generation">Geração de imagens</option>
+    </select>
+    <button id="ahsFind" type="button">Encontrar modelo adequado</button>
+  </div>
+  <p id="ahsMessage" class="ahs-muted" role="status">A consultar o perfil de hardware e os runtimes disponíveis…</p>
+  <div id="ahsHardware" class="ahs-hardware"></div>
+  <div id="ahsResults"></div>
+  <p class="ahs-muted">Os links remotos abrem o ficheiro GGUF direto no navegador; ainda não transferem o ficheiro automaticamente para a pasta <code>models</code>. Modelos marcados como bloqueados exigem integração do runtime indicado e não devem ser descarregados para utilização antes dessa integração.</p>
+</section>
+</details>
+<div class="ch"><h2><span data-i="chat"></span>Conversa</h2><button class="clear" id="clr"><span data-i="trash"></span>Limpar conversa</button></div>
+  <div class="chat" id="chat"></div>
+  <div class="comp">
+    <div class="cin">
+      <button class="attach" id="attach-placeholder" type="button" disabled title="Anexos serão integrados numa etapa futura" aria-label="Anexos — ainda não disponível">＋</button>
+      <textarea id="q" placeholder="Escreve a tua pergunta..."></textarea>
+      <div class="composer-actions">
+        <label class="composer-model-label" for="sel">Modelo</label>
+        <div class="sel composer-model"><select id="sel" aria-label="Selecionar modelo local"></select><span data-i="chev"></span></div>
+        <button class="send" id="go" data-i="send" title="Enviar" aria-label="Enviar mensagem"></button>
+      </div>
+    </div>
+    <div class="hint"><div><span data-i="kbd"></span>Enter para enviar<span class="sep"></span>Shift + Enter para nova linha</div><div class="r">Modelo: <span id="fm">—</span><span class="sep"></span>Porta: <span id="fp">—</span></div></div>
+  </div>
+</main>
+</div>
+</div>
+<dialog id="dlg"><h3 id="dt" style="margin-top:0"></h3><pre id="dp"></pre><button class="btn" onclick="dlg.close()">Fechar</button></dialog>
+<script>
+const P={
+bot:'<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4"/><circle cx="12" cy="3.5" r="1"/><circle cx="9" cy="14" r="1.3"/><circle cx="15" cy="14" r="1.3"/><path d="M2 13v3M22 13v3"/>',
+gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/><circle cx="12" cy="12" r="7"/>',
+diag:'<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M12 9v6M9 12h6"/>',
+monitor:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+box:'<path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
+stack:'<rect x="3" y="8" width="14" height="12" rx="2"/><path d="M7 8V6a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2h-2"/>',
+chev:'<path d="M6 9l6 6 6-6"/>',
+chat:'<path d="M4 5h14a2 2 0 012 2v8a2 2 0 01-2 2h-7l-4 3v-3H4a2 2 0 01-2-2V7a2 2 0 012-2z"/>',
+trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
+folder:'<path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
+send:'<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>',
+user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+kbd:'<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>',
+ctx:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 9h6M9 13h6"/>',
+clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+gen:'<path d="M4 12h12M12 6l6 6-6 6"/><path d="M20 5v14"/>',
+cog:'<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+ok:'<circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/><path d="M7.5 12.5l3 3 6-6.5" stroke="#0e1a34" stroke-width="2.2"/>'};
+const ic=n=>`<svg class="i" viewBox="0 0 24 24">${P[n]}</svg>`;
+function icons(root=document){root.querySelectorAll("[data-i]").forEach(e=>{e.insertAdjacentHTML("afterbegin",ic(e.dataset.i));e.removeAttribute("data-i")})}
+icons();
+const $=id=>document.getElementById(id);
+let models=[],sel=null,hist=[],busy=false,avg=null,port=8089,ctx=2048;
+const short=n=>n.replace(/[-.]I?Q\d[\w]*\.gguf$/i,"").replace(/\.gguf$/i,"");
+const hm=()=>new Date().toLocaleTimeString("pt-PT",{hour:"2-digit",minute:"2-digit"});
+const pill=(c,t)=>{$("pill").className="pill "+c;$("pill").textContent=t};
+async function api(u,b){const r=await fetch(u,b?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}:{});const d=await r.json();if(!r.ok)throw new Error(d.error||"Erro "+r.status);return d}
+function paintStatus(s){
+  $("os").textContent=s.os;$("cpu").textContent=`${s.cpu_cores} núcleos (${s.cpu_threads} threads)`;
+  $("ramt").textContent=s.ram?s.ram.total_gb+" GB":"—";$("ramf").textContent=s.ram?s.ram.available_gb+" GB":"—";
+  $("dl").textContent=`Disco (${s.disk_label.replace(/[\\\/]$/,"")})`;$("disk").textContent=s.disk_free_gb!=null?s.disk_free_gb+" GB livres":"—";
+  $("gpu").textContent=s.gpu;
+  $("c1").textContent=s.config.threads;$("c2").textContent=s.config.context;$("c3").textContent=s.config.gpu_layers+" (CPU)";$("c4").textContent="~ "+s.config.kv_cache_gb+" GB";
+  port=s.server.port;ctx=s.config.context;$("fp").textContent=port;
+}
+function paintModel(){
+  const m=models.find(x=>x.name===sel);
+  $("sel").value=sel||"";
+  $("sub").textContent=sel?short(sel)+" · llama.cpp":"Sem modelo · llama.cpp";
+  $("fm").textContent=sel?short(sel):"—";
+  $("mm").textContent=m?`Tamanho: ${m.size_gb} GB | Contexto máx.: ${ctx}`:"—";
+  $("ml").replaceChildren(...models.map(x=>{const b=document.createElement("button");b.className="mi"+(x.name===sel?" on":"");
+    b.innerHTML='<span class="dot"></span><div><div class="n"></div><div class="s"></div></div>';
+    b.querySelector(".n").textContent=x.name;b.querySelector(".s").textContent=x.size_gb+" GB";b.onclick=()=>pick(x.name);return b}));
+}
+async function pick(name){
+  if(busy||name===sel)return;
+  sel=name;paintModel();pill("load","A iniciar modelo…");busy=true;$("go").disabled=true;
+  try{await api("/api/load",{name});pill("","Servidor local ativo")}
+  catch(e){pill("off","Servidor parado");add("err",e.message)}
+  busy=false;$("go").disabled=false;
+}
+function renderAssistantContent(target, value){
+  if(!target)return;
+  const source=typeof value==="string"?value:String(value==null?"":value);
+  const fence=/```([^\r\n`]*)\r?\n([\s\S]*?)(```|$)/g;
+  const pieces=[];
+  let position=0,match;
+  while((match=fence.exec(source))!==null){
+    if(match.index>position)pieces.push({type:"text",value:source.slice(position,match.index)});
+    let codeText=match[2];
+    if(match[3]==="```")codeText=codeText.replace(/\r?\n$/,"");
+    pieces.push({type:"code",language:match[1].trim(),value:codeText});
+    position=fence.lastIndex;
+  }
+  if(!pieces.some(piece=>piece.type==="code")){
+    target.classList.remove("has-code");
+    target.textContent=source;
+    return;
+  }
+  if(position<source.length)pieces.push({type:"text",value:source.slice(position)});
+  target.classList.add("has-code");
+  target.replaceChildren();
+  const appendProse=value=>{
+    if(!value.trim())return;
+    const paragraph=document.createElement("div");
+    paragraph.className="assistant-prose";
+    paragraph.textContent=value.trim();
+    target.appendChild(paragraph);
+  };
+  for(const piece of pieces){
+    if(piece.type==="text"){appendProse(piece.value);continue;}
+    const card=document.createElement("section");card.className="code-card";
+    const toolbar=document.createElement("div");toolbar.className="code-toolbar";
+    const label=document.createElement("span");label.className="code-language";
+    const language=piece.language.replace(/[^a-zA-Z0-9_+#.\-]/g,"").slice(0,30);
+    label.textContent=language||"Código";
+    const copy=document.createElement("button");copy.type="button";copy.className="copy-code-btn";
+    copy.textContent="Copiar código";copy.setAttribute("aria-label","Copiar código");
+    const pre=document.createElement("pre"),code=document.createElement("code");
+    if(language)code.className="language-"+language.toLowerCase();
+    code.textContent=piece.value;pre.appendChild(code);toolbar.append(label,copy);card.append(toolbar,pre);target.appendChild(card);
+    copy.addEventListener("click",async()=>{
+      const original=copy.textContent;
+      try{
+        if(navigator.clipboard&&navigator.clipboard.writeText){
+          await navigator.clipboard.writeText(code.textContent);
+        }else{
+          const temporary=document.createElement("textarea");temporary.value=code.textContent;
+          temporary.style.position="fixed";temporary.style.opacity="0";document.body.appendChild(temporary);
+          temporary.select();const copied=document.execCommand("copy");temporary.remove();
+          if(!copied)throw new Error("Área de transferência indisponível.");
+        }
+        copy.textContent="Copiado ✓";copy.classList.add("copied");
+      }catch(error){copy.textContent="Falha ao copiar";}
+      window.setTimeout(()=>{copy.textContent=original;copy.classList.remove("copied");},1600);
+    });
+  }
+}
+
+function add(kind,text,st){
+  const c=$("chat"),d=document.createElement("div");
+  if(kind==="user"){d.className="u";d.innerHTML='<span class="x"></span><span class="t">'+hm()+ic("user")+'</span>';d.firstChild.textContent=text}
+  else{d.className="b"+(kind==="err"?" err":"");
+    d.innerHTML='<div class="av">'+ic("bot")+'</div><div class="bc"><div class="tx"></div><div class="tm">'+hm()+'</div></div>';
+    renderAssistantContent(d.querySelector(".tx"), text);
+    if(st){d.querySelector(".tx").insertAdjacentHTML("afterend",`<div class="st">${ic("ok")}Resposta gerada em ${st.seconds}s<i></i>${st.tokens} tokens<i></i>${st.tok_s} tok/s</div>`)}}
+  c.appendChild(d);c.scrollTop=c.scrollHeight;return d;
+}
+function thinking(){
+  const d=document.createElement("div");d.className="b";
+  d.innerHTML=`<div class="av">${ic("bot")}</div><div class="bc th"><div class="h">${ic("cog")}A pensar… <span class="dots"><span></span><span></span><span></span></span></div><div class="sub">Analisando a pergunta…</div>
+  <div class="tr">${ic("ctx")}<span class="k">Contexto do modelo</span><span class="v">${ctx} tokens</span></div>
+  <div class="tr">${ic("clock")}<span class="k">Processamento</span><span class="v" id="tp">0.0s</span></div>
+  <div class="tr">${ic("gen")}<span class="k">Geração da resposta</span><span class="v">${avg?"~ "+(120/avg).toFixed(1)+"s (estimado)":"a calcular…"}</span></div><div class="tm">${hm()}</div></div>`;
+  $("chat").appendChild(d);$("chat").scrollTop=1e9;
+  const t0=Date.now(),iv=setInterval(()=>{const e=$("tp");if(e)e.textContent=((Date.now()-t0)/1000).toFixed(1)+"s"},100);
+  return()=>{clearInterval(iv);d.remove()};
+}
+async function streamApi(url,body,onEvent){
+  const response=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  if(!response.ok){
+    const raw=await response.text();
+    let message=raw;
+    try{const parsed=JSON.parse(raw);message=parsed.error||parsed.message||raw}catch(_){}
+    throw new Error(message||("HTTP "+response.status));
+  }
+  if(!response.body||!response.body.getReader) throw new Error("O navegador não suporta a resposta progressiva desta aplicação.");
+  const reader=response.body.getReader();
+  const decoder=new TextDecoder("utf-8");
+  let pending="",finalResult=null,streamError=null;
+  const parseBlock=block=>{
+    const data=block.split(/\r?\n/).filter(line=>line.startsWith("data:")).map(line=>line.slice(5).trim()).join("\n");
+    if(!data)return;
+    let event;
+    try{event=JSON.parse(data)}catch(_){return}
+    if(event.type==="error"){streamError=new Error(event.error||"Erro durante o processamento.");return}
+    if(event.type==="done")finalResult=event;
+    if(onEvent)onEvent(event);
+  };
+  while(true){
+    const part=await reader.read();
+    if(part.done)break;
+    pending+=decoder.decode(part.value,{stream:true}).replace(/\r\n/g,"\n");
+    let boundary;
+    while((boundary=pending.indexOf("\n\n"))>=0){
+      const block=pending.slice(0,boundary);pending=pending.slice(boundary+2);parseBlock(block);
+      if(streamError)throw streamError;
+    }
+  }
+  pending+=decoder.decode();
+  if(pending.trim())parseBlock(pending);
+  if(streamError)throw streamError;
+  if(!finalResult)throw new Error("A ligação terminou antes de receber a conclusão do processamento.");
+  return finalResult;
+}
+async function send(){
+  const t=$("q").value.trim();if(!t||busy)return;
+  if(!sel){add("err","Não há nenhum modelo selecionado.");return}
+  $("q").value="";add("user",t);hist.push({role:"user",content:t});busy=true;$("go").disabled=true;
+  let stopThinking=thinking(),thinkingVisible=true,answerNode=null,streamedContent="";
+  const closeThinking=()=>{if(thinkingVisible){stopThinking();thinkingVisible=false}};
+  try{
+    const result=await streamApi("/api/chat/stream",{messages:hist},event=>{
+      if(event.type==="meta"||event.type==="progress"){
+        const sub=document.querySelector(".th .sub");
+        if(sub&&event.message)sub.textContent=event.message;
+      }
+      if(event.type==="token"&&event.delta){
+        closeThinking();
+        if(!answerNode)answerNode=add("bot","");
+        streamedContent+=event.delta;
+        answerNode.querySelector(".tx").textContent=streamedContent;
+        $("chat").scrollTop=$("chat").scrollHeight;
+      }
+    });
+    closeThinking();
+    if(!answerNode)answerNode=add("bot",streamedContent||"");
+    renderAssistantContent(answerNode.querySelector(".tx"), streamedContent);
+    avg=result.tok_s||avg;
+    if(result.history_summary&&hist.length){
+      const originalHint=t.length<=800?t:(t.slice(0,300)+"\n[... texto original analisado por partes ...]\n"+t.slice(-350));
+      hist[hist.length-1].content="[Submissão extensa analisada por partes. Pedido/origem:]\n"+originalHint+
+        "\n[Resumo compacto das conclusões para contexto futuro:]\n"+result.history_summary;
+    }
+    hist.push({role:"assistant",content:streamedContent});
+    const metric=document.createElement("div");metric.className="st";
+    metric.innerHTML=ic("ok");
+    const seconds=Number(result.total_seconds!=null?result.total_seconds:result.seconds||0);
+    const tokens=Number(result.tokens||0);
+    const speed=Number(result.tok_s||0);
+    const label=result.mode==="chunked"?"Análise por "+Number(result.chunks||0)+" partes concluída em "+seconds.toFixed(1)+"s":"Resposta gerada em "+seconds.toFixed(1)+"s";
+    metric.appendChild(document.createTextNode(label+" · "+(result.tokens_estimated?"~":"")+tokens+" tokens · "+speed.toFixed(1)+" tok/s"));
+    answerNode.querySelector(".bc").appendChild(metric);
+  }catch(e){
+    closeThinking();
+    if(hist.length)hist.pop();
+    add("err",e&&e.message?e.message:String(e));
+  }
+  busy=false;$("go").disabled=false;$("q").focus();
+}
+$("go").onclick=send;
+$("q").onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}};
+$("clr").onclick=()=>{hist=[];$("chat").replaceChildren()};
+$("sel").onchange=e=>pick(e.target.value);
+
+$("mg").onclick=()=>openManager();
+
+function setActiveNavigation(id){
+  document.querySelectorAll(".nav-item").forEach(button=>button.classList.toggle("active",button.id===id));
+}
+$("nav-new-chat").onclick=()=>{
+  if(busy)return;
+  hist=[];$("chat").replaceChildren();$("q").focus();setActiveNavigation("nav-new-chat");
+};
+$("nav-history").onclick=()=>{
+  setActiveNavigation("nav-history");
+  show("Conversas recentes","O histórico persistente será implementado na Etapa 2. Nesta etapa, as mensagens ainda existem apenas na sessão atual do navegador. Não feches nem atualizes a página se quiseres preservar esta conversa temporária.");
+};
+$("nav-projects").onclick=()=>{
+  setActiveNavigation("nav-projects");
+  show("Projetos","A gestão de projetos será implementada numa etapa posterior, depois de o histórico persistente estar estável. Ainda não foram criadas pastas nem dados de projetos.");
+};
+$("nav-agents").onclick=()=>{
+  setActiveNavigation("nav-agents");
+  show("Agentes","Esta secção é apenas um ponto de navegação reservado. A integração de agentes será avaliada depois das etapas de conversas e projetos.");
+};
+$("nav-performance").onclick=async()=>{
+  setActiveNavigation("nav-performance");
+  try{show("Desempenho e calibração",JSON.stringify(await api("/api/calibration"),null,2));}
+  catch(error){show("Desempenho e calibração","Não foi possível consultar a calibração: "+error.message);}
+};
+let hardwareView=null;
+let hardwareOriginalParent=null;
+let hardwareOriginalNext=null;
+let hardwareOriginalDisclosureOpen=false;
+$("nav-hardware").onclick=()=>openHardwareView();
+function openHardwareView(){
+  const main=document.querySelector("main");
+  const disclosure=$("adaptiveHardwareDisclosure");
+  if(!hardwareView) hardwareView=$("hardware-view");
+  if(!hardwareOriginalParent){
+    hardwareOriginalParent=disclosure.parentNode;
+    hardwareOriginalNext=disclosure.nextSibling;
+  }
+  hardwareOriginalDisclosureOpen=disclosure.open;
+  hardwareView.hidden=false;
+  // The dedicated view displays the complete selector, not the collapsed disclosure.
+  if(disclosure.parentNode!==hardwareView) hardwareView.appendChild(disclosure);
+  disclosure.open=true;
+  const originalNodes=Array.from(main.children).filter(node=>node!==hardwareView && node.id!=="manager-view");
+  originalNodes.forEach(node=>{ if(node!==hardwareView) node.hidden=true; });
+  if(typeof managerView!=="undefined" && managerView) managerView.hidden=true;
+  $("hardware-back").onclick=closeHardwareView;
+  $("hardware-back-bottom").onclick=closeHardwareView;
+  window.scrollTo({top:0,behavior:"auto"});
+}
+function closeHardwareView(){
+  const main=document.querySelector("main");
+  const disclosure=$("adaptiveHardwareDisclosure");
+  if(hardwareOriginalParent && disclosure.parentNode===hardwareView){
+    if(hardwareOriginalNext && hardwareOriginalNext.parentNode===hardwareOriginalParent) hardwareOriginalParent.insertBefore(disclosure,hardwareOriginalNext);
+    else hardwareOriginalParent.appendChild(disclosure);
+  }
+  disclosure.open=hardwareOriginalDisclosureOpen;
+  hardwareView.hidden=true;
+  Array.from(main.children).forEach(node=>{
+    if(node.id!=="hardware-view") node.hidden=false;
+  });
+  if(typeof managerView!=="undefined" && managerView) managerView.hidden=false;
+  setActiveNavigation("nav-new-chat");
+  window.scrollTo({top:0,behavior:"auto"});
+}
+$("nav-diagnostics").onclick=()=>{setActiveNavigation("nav-diagnostics");$("diag").click();};
+
+let managerView=null;
+let managerOriginalNodes=[];
+async function openManager(){
+  if(typeof hardwareView!=="undefined" && hardwareView && !hardwareView.hidden) closeHardwareView();
+  if(!managerView){
+    const main=document.querySelector("main");
+    managerOriginalNodes=Array.from(main.childNodes);
+    managerView=document.createElement("section");
+    managerView.id="manager-view";
+    managerView.hidden=true;
+    managerView.innerHTML=`
+      <div class="ch"><h2>Gestor de modelos</h2>
+      <button class="btn" id="manager-back">Voltar à conversa</button></div>
+      <p class="manager-intro">Catálogo de modelos encontrados localmente.</p>
+      <div class="manager-tools">
+        <input id="manager-search" type="search" placeholder="Pesquisar modelos..." aria-label="Pesquisar modelos">
+        <select id="manager-category" aria-label="Categoria">
+          <option value="all">Todas as categorias</option>
+          <option value="text">Texto</option><option value="vision">Visão</option>
+        </select>
+        <button class="btn" id="manager-refresh">Atualizar lista</button>
+      </div>
+      <div id="manager-summary" class="manager-summary"></div>
+      <div id="manager-list" class="manager-list"></div>
+      <hr>
+      <div class="ch"><h3>Hub online - Hugging Face</h3></div>
+      <p class="manager-intro">Pesquisa remota. Consultar nao descarrega nem instala modelos.</p>
+      <div class="manager-tools">
+        <input id="hub-search" type="search" placeholder="Pesquisar modelos online..." aria-label="Pesquisar modelos online">
+        <button class="btn" id="hub-refresh">Pesquisar online</button>
+      </div>
+      <div id="hub-summary" class="manager-summary">Pesquisa online ainda nao iniciada.</div>
+      <div id="hub-list" class="manager-list"></div>
+      <p class="manager-note">Downloads e eliminacao continuam desativados.</p>
+      <p class="manager-note">Downloads e eliminação estão desativados nesta versão.</p>`;
+    document.querySelector("main").appendChild(managerView);
+    $("manager-back").onclick=closeManager;
+    $("manager-refresh").onclick=renderManager;
+    $("manager-search").oninput=renderManagerCards;
+    $("manager-category").onchange=renderManagerCards;
+    $("hub-refresh").onclick=renderHub;
+    $("hub-search").addEventListener("keydown",e=>{if(e.key==="Enter")renderHub();});
+  }
+  managerOriginalNodes.forEach(n=>{if(n.nodeType===1)n.hidden=true;});
+  managerView.hidden=false;
+  await renderManager();
+}
+function closeManager(){
+  if(managerView)managerView.hidden=true;
+  managerOriginalNodes.forEach(n=>{if(n.nodeType===1)n.hidden=false;});
+}
+async function renderManager(){
+  $("manager-summary").textContent="A atualizar modelos locais…";
+  try{
+    const d=await api("/api/catalog");
+    models=d.catalog||[];
+    renderManagerCards();
+  }catch(e){
+    $("manager-summary").textContent="Erro: "+e.message;
+    $("manager-list").replaceChildren();
+  }
+}
+async function renderHub(){
+  const input=$("hub-search");
+  const summary=$("hub-summary");
+  const list=$("hub-list");
+  const q=input.value.trim();
+  summary.textContent="A pesquisar no Hugging Face...";
+  list.replaceChildren();
+  try{
+    const url="/api/hub?limit=20"+(q?"&q="+encodeURIComponent(q):"");
+    const d=await api(url);
+    const rows=Array.isArray(d.models)?d.models:[];
+    summary.textContent=rows.length+" repositorio(s) encontrados em "+(d.source||"Hugging Face")+".";
+    if(!rows.length){
+      const p=document.createElement("p");
+      p.textContent="Sem resultados para esta pesquisa.";
+      list.appendChild(p);
+      return;
+    }
+    for(const m of rows){
+      const card=document.createElement("article");
+      card.className="manager-card";
+      const h=document.createElement("h3");
+      h.textContent=m.id||"Repositorio sem nome";
+      const badge=document.createElement("span");
+      badge.className="manager-badge";
+      badge.textContent=m.installed?"Possivelmente instalado":"Repositorio remoto";
+      const stats=document.createElement("p");
+      stats.textContent="Downloads: "+Number(m.downloads||0).toLocaleString("pt-PT")+
+        " | Gostos: "+Number(m.likes||0).toLocaleString("pt-PT");
+      const task=document.createElement("p");
+      task.textContent="Tarefa: "+(m.pipeline_tag||"nao indicada");
+      const tags=document.createElement("p");
+      tags.textContent="Tags: "+(Array.isArray(m.tags)?m.tags.slice(0,5).join(", "):"—");
+      const link=document.createElement("a");
+      link.textContent="Ver repositorio";
+      link.href="https://huggingface.co/"+String(m.id||"").split("/").map(encodeURIComponent).join("/");
+      link.target="_blank";
+      link.rel="noopener noreferrer";
+      card.append(h,badge,stats,task,tags,link);
+      list.appendChild(card);
+    }
+  }catch(e){
+    summary.textContent="Nao foi possivel pesquisar online: "+e.message;
+  }
+}
+function renderManagerCards(){
+  const q=$("manager-search").value.trim().toLowerCase();
+  const c=$("manager-category").value;
+  const list=$("manager-list");
+  const rows=models.filter(m=>(!q||m.name.toLowerCase().includes(q))&&(c==="all"||m.category===c));
+  $("manager-summary").textContent=rows.length+" modelo(s) local(is)";
+  list.replaceChildren();
+  if(!rows.length){
+    const p=document.createElement("p");p.textContent="Não foram encontrados modelos.";list.appendChild(p);return;
+  }
+  for(const m of rows){
+    const card=document.createElement("article");card.className="manager-card";
+    const h=document.createElement("h3");h.textContent=m.name;
+    const badge=document.createElement("span");badge.className="manager-badge";
+    badge.textContent=m.category==="vision"?"Visão · instalado":"Texto · instalado";
+    const size=document.createElement("p");size.textContent="Tamanho: "+m.size_gb+" GB";
+    const dep=document.createElement("p");
+    dep.textContent=m.category==="vision"?(m.dependency?"Dependência mmproj: "+m.dependency:"Dependência mmproj não encontrada."):"Modelo de texto local.";
+    const btn=document.createElement("button");btn.className="btn";btn.textContent="Usar modelo";
+    btn.disabled=busy||m.name===sel;
+    btn.onclick=async()=>{closeManager();await pick(m.name);};
+    card.append(h,badge,size,dep,btn);list.appendChild(card);
+  }
+}
+
+$("cfg").onclick=async()=>show("Configuração (automática)",JSON.stringify((await api("/api/status")).config,null,2));
+$("diag").onclick=async()=>show("Diagnóstico",JSON.stringify(await api("/api/status"),null,2));
+function show(t,p){$("dt").textContent=t;$("dp").textContent=p;$("dlg").showModal()}
+(async()=>{
+  try{
+    const [m,s]=await Promise.all([api("/api/models"),api("/api/status")]);
+    models=m.models;paintStatus(s);
+    sel=s.server.model||(models[0]&&models[0].name)||null;
+    $("sel").replaceChildren(...models.map(x=>new Option(x.name,x.name)));
+    paintModel();
+    if(!models.length){pill("off","Sem modelos");return}
+    if(s.server.ready)pill("","Servidor local ativo");else{const n=sel;sel=null;await pick(n)}
+  }catch(e){pill("off","Servidor indisponível");add("err",e.message)}
+})();
+
+/* Preferências visuais persistentes */
+(function initLayoutControls() {
+  const sidebar = document.getElementById("sidebar");
+  const resizer = document.getElementById("sidebar-resizer");
+  const toggle = document.getElementById("toggle-sidebar");
+  const body = document.body;
+  if (!sidebar || !toggle || !resizer) return;
+
+  const read = (key, fallback) => {
+    try {
+      const value = localStorage.getItem("adaptive-ui-" + key);
+      return value === null ? fallback : value;
+    } catch (_) { return fallback; }
+  };
+  const save = (key, value) => {
+    try { localStorage.setItem("adaptive-ui-" + key, String(value)); } catch (_) {}
+  };
+
+  const initialWidth = Math.min(600, Math.max(260, Number(read("sidebar-width", 380)) || 380));
+  document.documentElement.style.setProperty("--sidebar-width", initialWidth + "px");
+
+  if (read("sidebar-hidden", "false") === "true") body.classList.add("sidebar-hidden");
+
+  // Agrupar o conteúdo de cada cartão para permitir recolher o painel.
+  sidebar.querySelectorAll(".card").forEach((card, index) => {
+    const heading = card.querySelector(".ct");
+    if (!heading) return;
+
+    let content = card.querySelector(".card-content");
+    if (!content) {
+      content = document.createElement("div");
+      content.className = "card-content";
+      while (heading.nextSibling) content.appendChild(heading.nextSibling);
+      card.appendChild(content);
+    }
+
+    heading.setAttribute("role", "button");
+    heading.setAttribute("tabindex", "0");
+    heading.setAttribute("aria-expanded", "true");
+
+    const setCollapsed = collapsed => {
+      card.classList.toggle("collapsed", collapsed);
+      content.hidden = collapsed;
+      heading.setAttribute("aria-expanded", String(!collapsed));
+      save("panel-" + index, collapsed);
+    };
+
+    const initiallyCollapsed = read("panel-" + index, "true") === "true";
+    setCollapsed(initiallyCollapsed);
+
+    heading.addEventListener("click", () => setCollapsed(!card.classList.contains("collapsed")));
+    heading.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        setCollapsed(!card.classList.contains("collapsed"));
+      }
+    });
+  });
+
+  const updateToggle = () => {
+    const hidden = body.classList.contains("sidebar-hidden");
+    toggle.textContent = hidden ? "\u2630" : "\u00D7";
+    toggle.title = hidden ? "Mostrar barra lateral" : "Ocultar barra lateral";
+    toggle.setAttribute("aria-expanded", String(!hidden));
+  };
+
+  toggle.addEventListener("click", () => {
+    body.classList.toggle("sidebar-hidden");
+    save("sidebar-hidden", body.classList.contains("sidebar-hidden"));
+    updateToggle();
+  });
+  updateToggle();
+
+  let dragging = false;
+  resizer.addEventListener("pointerdown", event => {
+    if (window.matchMedia("(max-width: 900px)").matches) return;
+    dragging = true;
+    resizer.classList.add("dragging");
+    resizer.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  resizer.addEventListener("pointermove", event => {
+    if (!dragging) return;
+    const width = Math.min(600, Math.max(260, event.clientX));
+    document.documentElement.style.setProperty("--sidebar-width", width + "px");
+    save("sidebar-width", width);
+  });
+  const stopDragging = () => {
+    dragging = false;
+    resizer.classList.remove("dragging");
+  };
+  resizer.addEventListener("pointerup", stopDragging);
+  resizer.addEventListener("pointercancel", stopDragging);
+})();
+</script>
+
+<script id="adaptiveHardwareSelectorScript">
+(function(){
+  const root=document.getElementById('adaptiveHardwareSelector');
+  if(!root || root.dataset.bound==='1') return;
+  root.dataset.bound='1';
+  const task=root.querySelector('#ahsTask');
+  const find=root.querySelector('#ahsFind');
+  const message=root.querySelector('#ahsMessage');
+  const hardware=root.querySelector('#ahsHardware');
+  const results=root.querySelector('#ahsResults');
+  const badge=root.querySelector('#ahsBadge');
+  const esc=value=>String(value==null?'':value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const number=value=>Number.isFinite(Number(value))?Number(value):null;
+  function renderCard(model,blocked){
+    const reasons=Array.isArray(model.reasons)?model.reasons:(model.summary?[model.summary]:[]);
+    const ram=model.estimated_peak_ram_gb==null?'RAM por medir':('pico RAM estimado ~'+Number(model.estimated_peak_ram_gb).toFixed(1)+' GB');
+    const size=model.file_size_mb==null?'':(' · ficheiro '+Number(model.file_size_mb).toFixed(0)+' MB');
+    const runtime=model.runtime?('Runtime: '+model.runtime):'';
+    const calibration=model.calibration&&model.calibration.threads?('Calibrado: '+model.calibration.threads+' threads'+(model.calibration.generation_tok_s?' · benchmark '+Number(model.calibration.generation_tok_s).toFixed(1)+' tok/s':'')):(model.calibrated?'Perfil calibrado':'Ainda sem perfil calibrado');
+    let actions='';
+    if(model.installed && model.source_kind==='installed'){
+      actions=model.active?'<span class="ahs-chip ahs-success">Já ativo</span>':'<button type="button" data-load-model="'+esc(model.name)+'">Carregar modelo instalado</button>';
+    } else if(model.eligible && model.file_url){
+      actions='<a href="'+esc(model.file_url)+'" target="_blank" rel="noopener noreferrer">Ficheiro GGUF direto</a>';
+      if(model.model_url) actions+=' <a href="'+esc(model.model_url)+'" target="_blank" rel="noopener noreferrer">Detalhes do ficheiro</a>';
+    } else if(blocked && model.file_url && model.runtime==='audio.cpp'){
+      actions='<a href="'+esc(model.file_url)+'" target="_blank" rel="noopener noreferrer">Referência do ficheiro (não instalar ainda)</a>';
+    }
+    return '<article class="ahs-card"><div class="ahs-state">'+(blocked?'Bloqueado por compatibilidade':(model.active?'Instalado e ativo':(model.installed?'Instalado':'Elegível para este PC')) )+'</div>'+
+      '<h3>'+esc(model.name)+'</h3><p class="ahs-muted">'+esc(model.repo_id||model.source_kind||'Modelo local')+esc(size)+'</p>'+
+      '<p>'+esc(model.summary||'')+'</p><p class="ahs-muted">'+esc(runtime)+' · '+esc(ram)+'</p>'+
+      (model.calibration?'<p class="ahs-muted">'+esc(calibration)+' · validação: '+esc(model.calibration.validation_status||'não executada')+'</p>':'')+
+      (reasons.length?'<ul class="ahs-reasons">'+reasons.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'')+
+      (actions?'<div class="ahs-actions">'+actions+'</div>':'')+'</article>';
+  }
+  function render(data){
+    const hw=data.hardware||{};
+    badge.textContent=(data.counts&&data.counts.eligible||0)+' elegível(is) · '+(data.counts&&data.counts.blocked||0)+' bloqueado(s)';
+    hardware.innerHTML=[
+      ['RAM total',hw.total_ram_gb==null?'?':Number(hw.total_ram_gb).toFixed(1)+' GB'],
+      ['RAM disponível',hw.available_ram_gb==null?'?':Number(hw.available_ram_gb).toFixed(1)+' GB'],
+      ['Threads CPU',hw.cpu_threads==null?'?':hw.cpu_threads],
+      ['Disco livre',hw.disk_free_gb==null?'?':Number(hw.disk_free_gb).toFixed(0)+' GB'],
+      ['Contexto',hw.context==null?'?':hw.context]
+    ].map(pair=>'<span class="ahs-chip">'+esc(pair[0])+': '+esc(pair[1])+'</span>').join('');
+    message.textContent=data.message||'Seleção atualizada.';
+    const eligible=Array.isArray(data.eligible_candidates)?data.eligible_candidates:[];
+    const blocked=Array.isArray(data.blocked_candidates)?data.blocked_candidates:[];
+    let html='';
+    if(eligible.length) html='<h3>Recomendados para este hardware</h3><div class="ahs-grid">'+eligible.map(x=>renderCard(x,false)).join('')+'</div>';
+    if(blocked.length) html+='<details style="margin-top:14px"><summary>Ver candidatos bloqueados e respetivas razões ('+blocked.length+')</summary><div class="ahs-grid">'+blocked.map(x=>renderCard(x,true)).join('')+'</div></details>';
+    if(!eligible.length && !blocked.length) html='<p>Nenhum candidato curado para esta tarefa. A aplicação não vai sugerir um modelo sem runtime compatível.</p>';
+    results.innerHTML=html;
+  }
+  async function loadRecommendations(){
+    find.disabled=true;message.textContent='A avaliar recursos e runtimes…';badge.textContent='A analisar…';
+    try{
+      const response=await fetch('/api/recommendations?task='+encodeURIComponent(task.value),{cache:'no-store'});
+      const data=await response.json();
+      if(!response.ok||data.ok===false) throw new Error(data.error||('HTTP '+response.status));
+      render(data);
+    }catch(err){message.textContent='Não foi possível calcular recomendações: '+(err&&err.message?err.message:String(err));badge.textContent='Erro';}
+    finally{find.disabled=false;}
+  }
+  task.addEventListener('change',loadRecommendations);
+  find.addEventListener('click',loadRecommendations);
+  root.addEventListener('click',async event=>{
+    const button=event.target.closest('[data-load-model]');
+    if(!button) return;
+    const name=button.getAttribute('data-load-model');
+    if(!name) return;
+    button.disabled=true;button.textContent='A carregar…';
+    try{
+      const response=await fetch('/api/load',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+      const data=await response.json();
+      if(!response.ok||!data.ok) throw new Error(data.error||('HTTP '+response.status));
+      message.textContent='Modelo carregado: '+name;
+      await loadRecommendations();
+    }catch(err){message.textContent='Falha ao carregar modelo: '+(err&&err.message?err.message:String(err));}
+    finally{button.disabled=false;button.textContent='Carregar modelo instalado';}
+  });
+  loadRecommendations();
+})();
+</script>
+</body>
+</html>

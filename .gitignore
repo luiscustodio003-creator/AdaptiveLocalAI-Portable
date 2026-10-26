@@ -1,0 +1,15 @@
+﻿__pycache__/
+*.pyc
+.venv/
+models/
+runtime/
+*.gguf
+*.bin
+backups/
+*.bak-*
+*.repair-tmp
+
+logs/
+results/
+cache/
+data/model_install_state.json
