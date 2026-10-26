@@ -23,7 +23,7 @@ from pathlib import Path
 from statistics import mean
 from typing import Any, Callable, Iterable
 
-PROFILE_SCHEMA = 2
+PROFILE_SCHEMA = 3
 # AUTO_VALIDATION_V1
 DEFAULT_MIN_FREE_RAM_GB = 4.0
 # CALIBRATION_RAM_GUARD_V1
@@ -72,10 +72,8 @@ def _safe_float(value: Any) -> float | None:
 
 
 def _is_generation_row(row: dict[str, Any]) -> bool:
-    """Prefer llama-bench TG rows; tolerate a single-format/mock result."""
+    """Accept only explicitly labelled generation rows; never infer from throughput."""
     test_name = str(row.get("test", "") or "").strip().lower()
-    if not test_name:
-        return True
     return test_name.startswith("tg") or "generation" in test_name or test_name in {"gen", "generation"}
 
 
@@ -87,9 +85,7 @@ def summarize(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 
     generation_rows = [row for row in materialized if _is_generation_row(row)]
     if not generation_rows:
-        # Some builds may use a different label. Do not silently discard all
-        # output, but only accept rows with a plausible throughput and threads.
-        generation_rows = materialized
+        return []
 
     grouped: dict[int, list[float]] = {}
     for row in generation_rows:
@@ -192,7 +188,8 @@ def _file_info(path: Path) -> dict[str, Any]:
         raise OSError(f"Ficheiro alterado durante o cálculo do SHA-256: {path}")
 
     return {
-        "path": str(path.resolve()),
+        # Relative identity keeps portable profiles independent of installation paths.
+        "path": path.name,
         "size_bytes": after.st_size,
         "mtime_ns": after.st_mtime_ns,
         "sha256": digest.hexdigest(),
@@ -400,6 +397,12 @@ class Calibrator:
                         if not isinstance(validation, dict) or validation.get("passed") is not True:
                             raise CalibrationError("A validacao de inferencia real falhou; o novo perfil nao foi guardado.")
                         profile["validation"] = copy.deepcopy(validation)
+                    # Reject profiles if model/runtime changed during validation.
+                    final_fingerprint = self._fingerprint(model_path, bench_path)
+                    if final_fingerprint != fingerprint:
+                        raise CalibrationError(
+                            "A identidade do modelo/runtime mudou durante a calibração; perfil não guardado."
+                        )
                     self._write_profile(name, profile)
                     self._set_status("done", error=None, result=copy.deepcopy(profile))
                     return
@@ -488,18 +491,26 @@ class Calibrator:
 
     def _fingerprint(self, model_path: Path, bench_path: Path) -> dict[str, Any]:
         try:
-            # llama.cpp uses adjacent ggml backend DLLs as well as llama-bench.exe;
-            # include their metadata so a runtime update invalidates old profiles.
-            runtime_libraries = [
-                _file_info(path)
-                for path in sorted(bench_path.parent.glob("ggml*.dll"))
-                if path.is_file()
-            ]
+            # Identify platform-specific shared libraries and the server used for inference.
+            runtime_dir = bench_path.parent
+            library_patterns = ("*.dll", "*.so", "*.so.*", "*.dylib")
+            libraries = {
+                path.resolve() for pattern in library_patterns
+                for path in runtime_dir.glob(pattern) if path.is_file()
+            }
+            server_names = ("llama-server.exe", "llama-server")
+            server_path = next((runtime_dir / name for name in server_names
+                                if (runtime_dir / name).is_file()), None)
+            runtime_libraries = [_file_info(path) for path in sorted(libraries, key=lambda p: p.name.lower())]
             return {
+                "schema": PROFILE_SCHEMA,
                 "model": _file_info(model_path),
                 "runtime": {
                     "benchmark": _file_info(bench_path),
+                    "server": _file_info(server_path) if server_path else None,
                     "libraries": runtime_libraries,
+                    "platform": platform.system().lower(),
+                    "architecture": platform.machine().lower(),
                 },
                 "benchmark_config": {
                     "prompt_tokens": 32,
