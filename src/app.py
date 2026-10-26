@@ -1,6 +1,6 @@
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-import json, os, platform, shutil, socket, subprocess, threading, time
+import json, os, platform, re, shutil, socket, subprocess, threading, time
 import urllib.error, urllib.parse, urllib.request
 from calibration import Calibrator, CalibrationError, Interrupted
 from model_watcher import ModelDirectoryWatcher
@@ -106,6 +106,55 @@ def ram_info():
         "available_gb": round(available / 1024 ** 3, 1) if available is not None else None,
         "source": HARDWARE.get("memory_source", "unknown"),
     }
+
+
+_DEVICE_PROBE_CACHE = {"checked_at": 0.0, "result": None}
+_DEVICE_PROBE_LOCK = threading.Lock()
+
+
+def probe_runtime_devices(*, refresh=False):
+    """Ask llama.cpp for devices without enabling GPU offload automatically."""
+    now = time.monotonic()
+    with _DEVICE_PROBE_LOCK:
+        cached = _DEVICE_PROBE_CACHE.get("result")
+        if cached is not None and not refresh and now - _DEVICE_PROBE_CACHE["checked_at"] < 60:
+            return dict(cached)
+        runtime = find_runtime()
+        if runtime is None:
+            result = {"supported": False, "checked": False, "devices": [],
+                      "source": "runtime_missing", "detail": "llama-server não encontrado"}
+        else:
+            try:
+                completed = subprocess.run(
+                    [str(runtime), "--list-devices"],
+                    capture_output=True, text=True, timeout=8, check=False,
+                    cwd=str(runtime.parent),
+                )
+                output = ((completed.stdout or "") + "\n" + (completed.stderr or "")).strip()
+                lines = [line.strip() for line in output.splitlines() if line.strip()]
+                has_device_list = any("available devices" in line.lower() or
+                                      "device" in line.lower() for line in lines)
+                devices = [line for line in lines if re.match(r"^(?:[-*]\s*)?(?:CUDA|Vulkan|Metal|ROCm|SYCL|CPU|GPU|[0-9]+:)", line, re.I)]
+                result = {
+                    "supported": completed.returncode == 0,
+                    "checked": True,
+                    "return_code": completed.returncode,
+                    "devices": devices,
+                    "source": "llama_server_list_devices",
+                    "detail": "\n".join(lines)[:12000],
+                    "device_listing_detected": has_device_list,
+                    "runtime_path": str(runtime.relative_to(ROOT)),
+                    "gpu_offload_enabled": False,
+                }
+            except subprocess.TimeoutExpired:
+                result = {"supported": False, "checked": True, "devices": [],
+                          "source": "llama_server_list_devices", "detail": "Timeout ao consultar dispositivos"}
+            except Exception as exc:
+                result = {"supported": False, "checked": True, "devices": [],
+                          "source": "llama_server_list_devices",
+                          "detail": f"{type(exc).__name__}: {exc}"}
+        _DEVICE_PROBE_CACHE.update(checked_at=time.monotonic(), result=result)
+        return dict(result)
 
 
 def system_status():
@@ -462,6 +511,13 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
+        if path == "/api/diagnostics":
+            return self.send_json({
+                "hardware": HARDWARE,
+                "runtime": probe_runtime_devices(),
+                "plan": _DEFAULT_PLAN,
+                "system": system_status(),
+            })
         if path == "/api/status":
             self.send_json(system_status())
         elif path == "/api/models":
@@ -691,6 +747,13 @@ class Handler(SimpleHTTPRequestHandler):
                 name = str(body.get("name") or "").strip()
                 result = model_watcher.recalibrate_existing(name)
                 return self.send_json(result, 202 if result.get("accepted") else 409)
+            elif path == "/api/diagnostics/refresh":
+                return self.send_json({
+                    "hardware": HARDWARE,
+                    "runtime": probe_runtime_devices(refresh=True),
+                    "plan": _DEFAULT_PLAN,
+                    "system": system_status(),
+                })
             elif path == "/api/load":
                 with activity_lock:
                     validation_active = maintenance.get("active", False)
