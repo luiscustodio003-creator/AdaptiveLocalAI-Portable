@@ -28,7 +28,7 @@ SYSTEM_PROMPT = (
     "Quando pedirem código completo, não omitas partes com reticências. "
 )
 
-state = {"proc": None, "model": None, "loading": False, "error": None, "threads": THREADS}
+state = {"proc": None, "model": None, "loading": False, "error": None, "threads": THREADS, "context": active_context(), "launch_plan": _DEFAULT_PLAN.copy()}
 lock = threading.Lock()
 # CALIBRATION_INTEGRATION_V1
 activity = {"active_chats": 0, "active_loads": 0}
@@ -157,6 +157,14 @@ def probe_runtime_devices(*, refresh=False):
         return dict(result)
 
 
+def active_context():
+    """Return the context size belonging to the currently active model plan."""
+    try:
+        return max(2048, min(16384, int(state.get("context", CTX))))
+    except (TypeError, ValueError):
+        return CTX
+
+
 def system_status():
     drive = Path(ROOT.anchor or "/")
     try:
@@ -182,8 +190,9 @@ def system_status():
         "runtime_path": str(rt.relative_to(ROOT)) if rt else None,
         "server": {"model": state["model"], "loading": state["loading"],
                    "ready": server_ready(), "error": state["error"], "port": LLAMA_PORT},
-        "config": {"threads": state.get("threads", THREADS), "context": CTX,
-                   "gpu_layers": _DEFAULT_PLAN["gpu_layers"], "launch_plan": _DEFAULT_PLAN},
+        "config": {"threads": state.get("threads", THREADS), "context": active_context(),
+                   "gpu_layers": state.get("launch_plan", _DEFAULT_PLAN).get("gpu_layers", 0),
+                   "launch_plan": state.get("launch_plan", _DEFAULT_PLAN)},
         "calibration": calibrator.status(),
     }
 
@@ -226,7 +235,13 @@ def load_model(name, threads_override=None):
         return False, "Modelo não encontrado."
     if not rt:
         return False, "llama-server não encontrado num runtime compatível com este sistema operativo."
-    plan = launch_plan(HARDWARE, {"name": path.name, "size_bytes": path.stat().st_size})
+    profile = calibrator.profile(path.name) if threads_override is None else None
+    requested_context = profile.get("context") if isinstance(profile, dict) else None
+    plan = launch_plan(
+        HARDWARE,
+        {"name": path.name, "size_bytes": path.stat().st_size},
+        requested_context=requested_context,
+    )
     effective_threads = int(plan["threads"])
     if threads_override is not None:
         try:
@@ -237,7 +252,6 @@ def load_model(name, threads_override=None):
             return False, "Numero de threads interno fora dos limites do CPU."
         effective_threads = requested_threads
     else:
-        profile = calibrator.profile(path.name)
         if profile:
             try:
                 prof_threads = int(profile.get("threads", THREADS))
@@ -247,7 +261,8 @@ def load_model(name, threads_override=None):
                 pass
 
     with lock:
-        state.update(loading=True, error=None, threads=effective_threads)
+        state.update(loading=True, error=None, threads=effective_threads,
+                     context=int(plan["context"]), launch_plan={**plan, "threads": effective_threads})
         stop_server()
         # Do not mistake an unrelated/stale listener for the process just launched.
         try:
@@ -470,7 +485,7 @@ def validate_calibrated_model(model_name, threads, cancel_event, must_abort):
             else:
                 with lock:
                     stop_server()
-                    state.update(loading=False, error=None, threads=THREADS)
+                    state.update(loading=False, error=None, threads=THREADS, context=CTX, launch_plan=_DEFAULT_PLAN.copy())
         except Exception as exc:
             restore_error = exc
         with activity_lock:
@@ -702,7 +717,7 @@ class Handler(SimpleHTTPRequestHandler):
             response_started = True
             result = adaptive_chat(
                 body.get("messages", []), call_once=chat, call_stream=chat_stream,
-                emit=emit, context_tokens=CTX, system_prompt=SYSTEM_PROMPT,
+                emit=emit, context_tokens=active_context(), system_prompt=SYSTEM_PROMPT,
             )
             public_result = {key: value for key, value in result.items() if key != "content"}
             emit({"type": "done", **public_result})
