@@ -687,6 +687,10 @@ class Handler(SimpleHTTPRequestHandler):
                 name = str(body.get("name") or "").strip()
                 result = model_watcher.notify_model_installed(name)
                 return self.send_json(result, 202 if result.get("accepted") else 409)
+            elif path == "/api/recalibrate-existing":
+                name = str(body.get("name") or "").strip()
+                result = model_watcher.recalibrate_existing(name)
+                return self.send_json(result, 202 if result.get("accepted") else 409)
             elif path == "/api/load":
                 with activity_lock:
                     validation_active = maintenance.get("active", False)
