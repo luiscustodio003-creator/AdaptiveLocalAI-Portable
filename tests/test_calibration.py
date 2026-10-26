@@ -294,3 +294,27 @@ def test_profile_rejects_changed_model_with_same_size_and_mtime(tmp_path):
 
     # O perfil antigo não pode ser utilizado após a alteração do conteúdo.
     assert worker.profile(model.name) is None
+def test_summary_rejects_unlabelled_rows_instead_of_guessing_generation():
+    rows = [
+        {"n_threads": 2, "avg_ts": 1000.0},
+        {"n_threads": 4, "avg_ts": 20.0},
+    ]
+    assert c.summarize(rows) == []
+
+
+def test_summary_rejects_prompt_only_rows():
+    rows = [
+        {"test": "pp32", "n_threads": 2, "avg_ts": 1000.0},
+        {"test": "pp32", "n_threads": 4, "avg_ts": 1800.0},
+    ]
+    assert c.summarize(rows) == []
+
+
+def test_file_identity_is_portable_and_content_sensitive(tmp_path):
+    path = tmp_path / "model.gguf"
+    path.write_bytes(b"first")
+    first = c._file_info(path)
+    path.write_bytes(b"other")
+    second = c._file_info(path)
+    assert first["path"] == second["path"] == "model.gguf"
+    assert first["sha256"] != second["sha256"]
